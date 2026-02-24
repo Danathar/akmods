@@ -59,6 +59,7 @@ fi
 
 ### PREPARE BUILD ENV
 RPMS_TO_INSTALL+=(
+    python3-cffi
     akmods
     gcc-c++
     mock

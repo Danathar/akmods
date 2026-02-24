@@ -8,6 +8,10 @@ ZFS_MINOR_VERSION="${ZFS_MINOR_VERSION:-}"
 
 cd /tmp
 
+# jq is required to parse OpenZFS release metadata before selecting the
+# expected release line.
+dnf install -y jq
+
 # Use cURL to fetch the given URL, saving the response to `data.json`
 curl "https://api.github.com/repos/openzfs/zfs/releases" -o data.json
 ZFS_VERSION=$(jq -r --arg ZMV "zfs-${ZFS_MINOR_VERSION}" '[ .[] | select(.prerelease==false and .draft==false) | select(.tag_name | startswith($ZMV))][0].tag_name' data.json|cut -f2- -d-)
