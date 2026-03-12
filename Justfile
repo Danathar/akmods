@@ -35,7 +35,7 @@ _org := shell('yq ".images.$1[\"$2\"].$3.org" images.yaml', version, kernel_flav
 _repo := shell('yq ".images.$1[\"$2\"].$3.repo" images.yaml', version, kernel_flavor, akmods_target)
 registry := env('AKMODS_REGISTRY', shell('yq ".images.$1[\"$2\"].$3.registry" images.yaml', version, kernel_flavor, akmods_target))
 transport := env('AKMODS_TRANSPORT', shell('yq ".images.$1[\"$2\"].$3.transport" images.yaml', version, kernel_flavor, akmods_target))
-akmods_name := 'akmods' + if akmods_target != 'common' { '-' +akmods_target } else { '' }
+akmods_name := env('AKMODS_IMAGE_NAME', shell('yq ".images.$1[\"$2\"].$3.name" images.yaml', version, kernel_flavor, akmods_target))
 
 # Functions
 [private]
