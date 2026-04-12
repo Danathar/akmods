@@ -9,6 +9,7 @@ KCWD := shell('mkdir -p $1 && echo $1', version_cache / 'KCWD')
 KCPATH := shell('mkdir -p $1 && echo $1', env('KCPATH', KCWD / 'rpms'))
 version_json := KCPATH / 'cache.json'
 builder := if kernel_flavor =~ 'centos' { 'quay.io/centos/centos:' + version } else { 'quay.io/fedora/fedora:' + version }
+ogc_image := "ghcr.io/opengamingcollective/kernel-packages-fedora:latest-fc" + version
 
 
 # Inputs
@@ -211,6 +212,14 @@ get-kernel-version:
             linux=$($dnf repoquery --whatprovides kernel-longterm | sort -V | tail -n1 | sed 's/.*://')
             kernel_name=kernel-longterm
             ;;
+        "ogc")
+            ogc_manifest=$(skopeo inspect --raw "docker://{{ ogc_image }}")
+            linux=$(echo "$ogc_manifest" | jq -r '
+                .layers[].annotations["org.opencontainers.image.title"]
+                | select(startswith("kernel-core-"))
+                | ltrimstr("kernel-core-") | rtrimstr(".rpm")
+            ')
+            ;;
         "main")
             base_image_name="base-atomic"
             linux=$(skopeo inspect docker://quay.io/fedora-ostree-desktops/$base_image_name:{{ version }} --format '{{{{ index .Labels "ostree.linux" }}')
@@ -228,6 +237,9 @@ get-kernel-version:
     minor=$(echo "$linux" | cut -d '.' -f 2)
     patch=$(echo "$linux" | cut -d '.' -f 3)
     kernel_major_minor_patch="${major}.${minor}.${patch}"
+    if [[ "{{ kernel_flavor }}" == "ogc" ]]; then
+        kernel_major_minor_patch=$(echo "$linux" | sed 's/\.fc.*$//')
+    fi
     linux="$(echo $linux | tr -d '[:cntrl:]')"
 
     # Debug Output
@@ -290,6 +302,7 @@ fetch-kernel: (cache-kernel-version)
         --env KERNEL_FLAVOR="{{ kernel_flavor }}" \
         --env KERNEL_NAME="{{ shell('jq -r .kernel_name < $1', version_json) }}" \
         --env KERNEL_VERSION="{{ shell('jq -r .kernel_release < $1' , version_json) }}" \
+        --env OGC_IMAGE="{{ ogc_image }}" \
         --volume "{{ KCWD }}":/tmp/kernel-cache \
         --entrypoint /bin/bash \
         -dt "{{ builder }}")
