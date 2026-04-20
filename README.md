@@ -4,6 +4,14 @@
 
 OCI images providing a set of cached kernel RPMs and extra kernel modules to Universal Blue images. Used for better hardware support and consistent build process.
 
+## Supply-chain scorecard
+
+OpenSSF Scorecard runs on pushes to `main`, on a weekly schedule, and when branch protection changes. The workflow uploads SARIF for GitHub code scanning and writes a readable Markdown summary directly into the workflow run, so readers do not need to download or inspect the SARIF artifact.
+
+To read the latest result, open the repository's **Actions** tab, choose **Scorecard supply-chain security**, and open the latest completed run. The run summary lists findings by check, including repeated workflow-permission findings that would otherwise be buried in SARIF.
+
+The Scorecard badge above tracks the public OpenSSF result for `ublue-os/akmods`. Fork-local runs may not publish to the public Scorecard API, but their Actions summaries and code-scanning uploads still reflect the fork's current state.
+
 ## How it's organized
 
 The [`akmods` images](https://github.com/orgs/ublue-os/packages?repo_name=akmods) are built and published daily. However, there's not a single image but several, given various kernels we now support.
