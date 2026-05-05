@@ -12,9 +12,42 @@ cd /tmp
 # expected release line.
 dnf install -y jq
 
-# Use cURL to fetch the given URL, saving the response to `data.json`
-curl "https://api.github.com/repos/openzfs/zfs/releases" -o data.json
-ZFS_VERSION=$(jq -r --arg ZMV "zfs-${ZFS_MINOR_VERSION}" '[ .[] | select(.prerelease==false and .draft==false) | select(.tag_name | startswith($ZMV))][0].tag_name' data.json|cut -f2- -d-)
+# Use cURL to fetch the given URL, saving the response to `data.json`.
+# GitHub Actions enables shell tracing in CI; disable it while handling tokens so
+# authenticated requests do not leak secrets into the job log.
+xtrace_was_enabled=0
+case $- in
+    *x*)
+        xtrace_was_enabled=1
+        set +x
+        ;;
+esac
+
+github_token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+if [[ -z "${github_token}" && -r /run/secrets/github_token ]]; then
+    github_token="$(cat /run/secrets/github_token)"
+fi
+curl_args=(-fsSL)
+if [[ -n "${github_token}" ]]; then
+    curl_args+=(-H "Authorization: Bearer ${github_token}")
+fi
+curl "${curl_args[@]}" "https://api.github.com/repos/openzfs/zfs/releases" -o data.json
+unset github_token curl_args
+
+if [[ "${xtrace_was_enabled}" == "1" ]]; then
+    set -x
+fi
+
+if ! jq -e 'type == "array"' data.json >/dev/null; then
+    echo "OpenZFS releases API response was not a JSON array." >&2
+    cat data.json >&2
+    exit 1
+fi
+ZFS_VERSION=$(jq -r --arg ZMV "zfs-${ZFS_MINOR_VERSION}" '[ .[] | select(.prerelease==false and .draft==false) | select(.tag_name | startswith($ZMV))][0].tag_name // empty' data.json | cut -f2- -d-)
+if [[ -z "${ZFS_VERSION}" ]]; then
+    echo "No non-draft, non-prerelease OpenZFS release found for zfs-${ZFS_MINOR_VERSION}." >&2
+    exit 1
+fi
 echo "ZFS_MINOR_VERSION==$ZFS_MINOR_VERSION"
 echo "ZFS_VERSION==$ZFS_VERSION"
 

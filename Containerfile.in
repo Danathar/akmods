@@ -156,6 +156,7 @@ fi
 RUNEOF
 RUN --mount=type=cache,dst=/var/cache/dnf \
     --mount=type=cache,dst=/var/cache/libdnf5 \
+    --mount=type=secret,id=github_token \
     bash <<'RUNEOF'
 set "${CI+-x}" -euo pipefail
 /tmp/build-kmod-zfs.sh

@@ -358,8 +358,24 @@ build: (cache-kernel-version) (fetch-kernel)
         "--tag" "{{ akmods_name + ':' + kernel_flavor + '-' + version + '-' + arch() }}"
         "--tag" "{{ akmods_name + ':' + kernel_flavor + '-' + version + '-' + shell("jq -r '.kernel_release' < $1", version_json) }}"
     )
+    SECRETS=()
+    xtrace_was_enabled=0
+    case $- in
+        *x*)
+            xtrace_was_enabled=1
+            set +x
+            ;;
+    esac
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        SECRETS+=(--secret=id=github_token,env=GITHUB_TOKEN)
+    elif [[ -n "${GH_TOKEN:-}" ]]; then
+        SECRETS+=(--secret=id=github_token,env=GH_TOKEN)
+    fi
+    if [[ "${xtrace_was_enabled}" == "1" ]]; then
+        set -x
+    fi
 
-    {{ podman }} build -f Containerfile.in --volume {{ KCPATH }}:/tmp/kernel_cache:ro "${CPP_FLAGS[@]}" "${LABELS[@]}" "${TAGS[@]}" --target RPMS {{ justfile_dir () }}
+    {{ podman }} build -f Containerfile.in --volume {{ KCPATH }}:/tmp/kernel_cache:ro "${SECRETS[@]}" "${CPP_FLAGS[@]}" "${LABELS[@]}" "${TAGS[@]}" --target RPMS {{ justfile_dir () }}
 
 # Test Cached Akmod RPMs
 [group('Build')]
@@ -388,8 +404,24 @@ test: (cache-kernel-version) (fetch-kernel)
             "--cpp-flag=-DZFS_MINOR_VERSION_ARG=ZFS_MINOR_VERSION={{ zfs_minor_version }}"
         )
     fi
+    SECRETS=()
+    xtrace_was_enabled=0
+    case $- in
+        *x*)
+            xtrace_was_enabled=1
+            set +x
+            ;;
+    esac
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        SECRETS+=(--secret=id=github_token,env=GITHUB_TOKEN)
+    elif [[ -n "${GH_TOKEN:-}" ]]; then
+        SECRETS+=(--secret=id=github_token,env=GH_TOKEN)
+    fi
+    if [[ "${xtrace_was_enabled}" == "1" ]]; then
+        set -x
+    fi
 
-    {{ podman }} build -f Containerfile.in --volume {{ KCPATH }}:/tmp/kernel_cache:ro "${CPP_FLAGS[@]}" --target test --tag akmods-test:latest {{ justfile_dir () }}
+    {{ podman }} build -f Containerfile.in --volume {{ KCPATH }}:/tmp/kernel_cache:ro "${SECRETS[@]}" "${CPP_FLAGS[@]}" --target test --tag akmods-test:latest {{ justfile_dir () }}
     if ! podman run --rm akmods-test:latest; then
         echo "Signatures Failed" >&2
         exit 1
