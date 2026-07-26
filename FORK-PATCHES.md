@@ -40,12 +40,20 @@ stated condition under which it should be deleted).
 - **Merge note:** this is the single most load-bearing patch in the fork. If an upstream merge silently
   reverts it, `zfs-aurora-complex` starts publishing to the wrong image name.
 
-### P3 — Fork README
+### P3 — README: Supply-chain scorecard section
 
 - **Files:** `README.md`
-- **What:** fork banner, rationale, and `ghcr.io/danathar/...` pull examples in place of `ghcr.io/ublue-os/...`.
-- **Merge note:** conflicts on nearly every upstream README change. Keep the fork's framing, fold in
-  upstream's substantive content.
+- **What:** one added section, "Supply-chain scorecard", documenting how to read the Scorecard results
+  produced by P4. This is the *entire* committed README delta against upstream.
+- **Merge note:** upstream owns the rest of this file. On conflict, take upstream's version and re-apply
+  this section.
+
+> **Not yet applied — do not treat as existing state.** A fork-identity README rewrite (fork banner in
+> place of the `# ublue-os akmods` heading, a "Why This Fork Exists" section, and `ghcr.io/danathar/...`
+> pull examples replacing `ghcr.io/ublue-os/...`) exists as an **uncommitted working-tree change** and is
+> not in the repository. As of this writing the committed README still carries upstream's heading and
+> upstream's image examples. When that work is committed, promote it into P3 above. Until then, an
+> upstream merge has no fork README content to preserve beyond the Scorecard section.
 
 ### P4 — OpenSSF Scorecard workflow
 
