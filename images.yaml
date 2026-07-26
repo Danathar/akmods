@@ -9,6 +9,13 @@ zfs:
   default:
     minor_version: "2.4"
     linux_experimental: false
+  # Fork customization: the Fedora `main` kernel (7.1.x on F44) is ahead of the
+  # maximum kernel OpenZFS 2.4.3 will configure against (7.0), so the ZFS akmod
+  # for this flavor needs --enable-linux-experimental the same way coreos-testing
+  # does. Without it `main` zfs builds fail at configure.
+  main:
+    minor_version: "2.4"
+    linux_experimental: true
   coreos-testing:
     minor_version: "2.4"
     linux_experimental: true
@@ -23,7 +30,9 @@ arch-only-x86: &arch-only-x86
     - x86_64
 
 akmods-base: &akmods-base
-  org: ublue-os
+  # Fork customization: publish into this fork's own GHCR namespace. Upstream
+  # uses `ublue-os`; a fork pushing there gets a 403 from the registry.
+  org: danathar
   registry: ghcr.io
   repo: akmods
   transport: docker://
@@ -145,8 +154,12 @@ images:
         - *server-build-group
   43:
     main:
+      # Fork customization: upstream builds no zfs akmod for `main`. This fork
+      # publishes one so zfs-aurora-complex can consume a ready-made cache image
+      # instead of rebuilding it from this repo's source on every run.
       !!merge <<:
         - *desktop-build-group-only-x86
+        - *server-build-group-only-x86
     ogc:
       !!merge <<:
         - *ogc-desktop-build-group-only-x86
@@ -156,8 +169,10 @@ images:
         - *server-build-group
   44:
     main:
+      # Fork customization: see the note on 43.main above.
       !!merge <<:
         - *desktop-build-group-only-x86
+        - *server-build-group-only-x86
     ogc:
       !!merge <<:
         - *ogc-desktop-build-group-only-x86
