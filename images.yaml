@@ -9,13 +9,26 @@ zfs:
   default:
     minor_version: "2.4"
     linux_experimental: false
-  # Fork customization: the Fedora `main` kernel (7.1.x on F44) is ahead of the
-  # maximum kernel OpenZFS 2.4.3 will configure against (7.0), so the ZFS akmod
-  # for this flavor needs --enable-linux-experimental the same way coreos-testing
-  # does. Without it `main` zfs builds fail at configure.
+  # Fork customization: `main` builds ZFS with upstream's kernel-compatibility
+  # gate ARMED (linux_experimental: false, same as the default).
+  #
+  # This was briefly `true`. zfs-aurora-complex used to build from
+  # `aurora-dx:latest`, whose Fedora `main` kernel (7.1.x on F44) runs ahead of
+  # the newest kernel OpenZFS 2.4.3 will configure against (7.0), so the akmod
+  # only built with --enable-linux-experimental. That consumer now builds from
+  # `aurora-dx:stable` (kernel 7.0.12-201.fc44), which is inside the supported
+  # range and needs no override.
+  #
+  # Leave this `false`. The flag disables OpenZFS's own refusal to build against
+  # an unvalidated kernel, so with it set, a future kernel bump past the
+  # supported ceiling would silently produce a module built against a kernel
+  # upstream declines to support instead of failing loudly. Failing the build is
+  # the wanted behaviour: consumers gate on it and surface it as an
+  # upstream-compat signal. Only set this `true` as a deliberate, temporary,
+  # documented exception -- never to make a red build go green.
   main:
     minor_version: "2.4"
-    linux_experimental: true
+    linux_experimental: false
   coreos-testing:
     minor_version: "2.4"
     linux_experimental: true
