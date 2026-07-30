@@ -26,9 +26,13 @@ stated condition under which it should be deleted).
 - **Why:** every image name in `images.yaml` is assembled as `<registry>/<org>/<name>`. Left at
   `ublue-os`, `just push` from this fork targets `ghcr.io/ublue-os/...` and the registry returns 403,
   because the fork's `GITHUB_TOKEN` has no write access to the upstream org.
-- **Currently inert.** Every build workflow is disabled, so nothing pushes anywhere and this value is
-  never exercised. It is kept so the destination is already correct if publishing is ever switched back
-  on. Note it has *never* run against a real registry — see the operational state section.
+- **This value is inert; the push path that uses it is not.** `zfs-aurora-complex` sets `org`
+  explicitly on the `main.zfs` node it rewrites (see P2), so the consumer never reads *this* anchor's
+  `org` — that is the narrow sense in which the value is unexercised. The `Justfile`'s push recipe
+  itself runs against a real registry on every cache rebuild that consumer triggers. Keep the value so
+  the destination is already correct for any target the consumer does not rewrite, and for a local
+  `just push`. This bullet previously said "nothing pushes anywhere" and that it had "*never* run
+  against a real registry"; both were wrong — see the operational state section.
 - **Merge note:** upstream touches this anchor whenever it adds a field. Keep `org`, take everything else.
 
 ### P2 — Image name comes from `images.yaml`, not the target name
@@ -51,11 +55,12 @@ stated condition under which it should be deleted).
      pointed at upstream's workflow runs, which say nothing about this fork).
   2. A "Why This Fork Exists" section — what this fork feeds and which patches are load-bearing.
   3. A "Supply-chain scorecard" section documenting how to read the results produced by P4.
-  4. A "This fork publishes no images" callout above "How it's organized".
+  4. A "This fork's workflows publish no images" callout above "How it's organized".
 - **Deliberately *not* changed:** the `COPY --from=ghcr.io/ublue-os/...` and
   `cosign verify ... ghcr.io/ublue-os/akmods:...` examples still point at **upstream's** registry. They
-  were briefly rewritten to `ghcr.io/danathar/...`, which was wrong: this fork publishes nothing, so
-  those refs pointed at images that do not exist, and the checked-in `cosign.pub` is upstream's key.
+  were briefly rewritten to `ghcr.io/danathar/...`, which was wrong: nothing publishes `akmods` or
+  `akmods-nvidia` under that namespace (both 404 as of 2026-07-30), so those refs pointed at images
+  that do not exist, and the checked-in `cosign.pub` is upstream's key.
   Do not "fix" them back to the fork's namespace unless publishing is actually turned on.
 - **Merge note:** conflicts on nearly every upstream README change. Keep the fork's framing and the
   no-images callout; fold in upstream's substantive content.
@@ -157,11 +162,17 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
 
 ## Operational state (not a patch, but easy to lose)
 
-### This fork builds and publishes nothing
+### This fork's own workflows build and publish nothing
 
 As of 2026-07-30, **all six `Build * akmods` workflows and `Cleanup Old Images` are
-`disabled_manually`.** No image has ever been pushed to `ghcr.io/danathar` — that namespace is empty.
-The fork is consumed as *source* by `zfs-aurora-complex`, which clones it and builds its own cache.
+`disabled_manually`**, so nothing is built or pushed by any workflow *in this repository*.
+
+That is not the same as `ghcr.io/danathar` being empty, which this section previously claimed. The
+fork is consumed as *source* by `zfs-aurora-complex`, which clones it, rewrites the `main.zfs` target
+(P2), and then runs **this repo's own `just push`**. The `Justfile`'s push path is therefore exercised
+regularly against a real registry; it is just driven from outside this repository. Do not read "the
+workflows are disabled" as "the publish code is dead" — that reading is what makes P1 look like
+removable dead weight during a merge.
 
 `Build MAIN akmods` was briefly enabled (2026-07-26 → 2026-07-30) while testing the retired T2 target,
 then switched back off. This state lives in GitHub repository settings, not in any file here, so `git
