@@ -26,6 +26,9 @@ stated condition under which it should be deleted).
 - **Why:** every image name in `images.yaml` is assembled as `<registry>/<org>/<name>`. Left at
   `ublue-os`, `just push` from this fork targets `ghcr.io/ublue-os/...` and the registry returns 403,
   because the fork's `GITHUB_TOKEN` has no write access to the upstream org.
+- **Currently inert.** Every build workflow is disabled, so nothing pushes anywhere and this value is
+  never exercised. It is kept so the destination is already correct if publishing is ever switched back
+  on. Note it has *never* run against a real registry — see the operational state section.
 - **Merge note:** upstream touches this anchor whenever it adds a field. Keep `org`, take everything else.
 
 ### P2 — Image name comes from `images.yaml`, not the target name
@@ -40,20 +43,22 @@ stated condition under which it should be deleted).
 - **Merge note:** this is the single most load-bearing patch in the fork. If an upstream merge silently
   reverts it, `zfs-aurora-complex` starts publishing to the wrong image name.
 
-### P3 — README: Supply-chain scorecard section
+### P3 — Fork README
 
 - **Files:** `README.md`
-- **What:** one added section, "Supply-chain scorecard", documenting how to read the Scorecard results
-  produced by P4. This is the *entire* committed README delta against upstream.
-- **Merge note:** upstream owns the rest of this file. On conflict, take upstream's version and re-apply
-  this section.
-
-> **Not yet applied — do not treat as existing state.** A fork-identity README rewrite (fork banner in
-> place of the `# ublue-os akmods` heading, a "Why This Fork Exists" section, and `ghcr.io/danathar/...`
-> pull examples replacing `ghcr.io/ublue-os/...`) exists as an **uncommitted working-tree change** and is
-> not in the repository. As of this writing the committed README still carries upstream's heading and
-> upstream's image examples. When that work is committed, promote it into P3 above. Until then, an
-> upstream merge has no fork README content to preserve beyond the Scorecard section.
+- **What:** four changes against upstream's README:
+  1. `# ublue-os akmods` → `# akmods (Danathar fork)`, and the per-flavor build badges dropped (they
+     pointed at upstream's workflow runs, which say nothing about this fork).
+  2. A "Why This Fork Exists" section — what this fork feeds and which patches are load-bearing.
+  3. A "Supply-chain scorecard" section documenting how to read the results produced by P4.
+  4. A "This fork publishes no images" callout above "How it's organized".
+- **Deliberately *not* changed:** the `COPY --from=ghcr.io/ublue-os/...` and
+  `cosign verify ... ghcr.io/ublue-os/akmods:...` examples still point at **upstream's** registry. They
+  were briefly rewritten to `ghcr.io/danathar/...`, which was wrong: this fork publishes nothing, so
+  those refs pointed at images that do not exist, and the checked-in `cosign.pub` is upstream's key.
+  Do not "fix" them back to the fork's namespace unless publishing is actually turned on.
+- **Merge note:** conflicts on nearly every upstream README change. Keep the fork's framing and the
+  no-images callout; fold in upstream's substantive content.
 
 ### P4 — OpenSSF Scorecard workflow
 
@@ -66,27 +71,18 @@ stated condition under which it should be deleted).
 
 ## Temporary
 
-### T1 — ZFS akmod for the `main` kernel flavor
+### T1 — `zfs.main` block pinning the kernel-compatibility gate
 
-- **Added:** 2026-07-26
-- **Files:** `images.yaml` (`images.43.main`, `images.44.main` merge in `*server-build-group-only-x86`),
-  `.github/workflows/build-akmods-main.yml` (generated)
-- **What:** upstream builds `zfs` only for the server flavors (`centos`, `coreos-*`, `longterm-*`). This
-  fork also builds and publishes `ghcr.io/danathar/akmods-zfs:main-43` and `:main-44`.
-- **Why:** `zfs-aurora-complex` targets Aurora DX, which rides the Fedora `main` kernel. Until this
-  existed, that repo had to rebuild the ZFS akmod from this repo's source on every run.
-- **Remove when:** upstream adds a `zfs` target under `main` (then take upstream's), or
-  `zfs-aurora-complex` stops consuming a published ZFS cache image.
-- **Merge note:** if upstream restructures the build-group anchors, re-derive this rather than taking the
-  merge result verbatim, then re-run `just generate-workflows`.
-
-### T2 — `--enable-linux-experimental` for the `main` flavor
-
-- **Added:** 2026-07-26
-- **Files:** `images.yaml` (`zfs.main.linux_experimental: true`)
-- **What:** passes `--enable-linux-experimental` to the OpenZFS `configure` for `main` builds only,
-  the same override `coreos-testing` already carries.
-- **Why:** OpenZFS 2.4.3 refuses to configure against a kernel newer than 7.0:
+- **Files:** `images.yaml` (`zfs.main`)
+- **What:** an explicit `zfs.main` block setting `minor_version: "2.4"` and
+  `linux_experimental: false`. Upstream has no `zfs.main` key at all.
+- **Why it is not redundant:** the values are identical to `zfs.default`, so this is *behaviourally* a
+  no-op — it exists to carry a warning at the point of temptation. `zfs-aurora-complex` injects its own
+  `images.<ver>.main.zfs` target at build time and the `Justfile` reads `.zfs.main.linux_experimental`
+  when building it, so this block is the knob a future maintainer would reach for when a `main` ZFS build
+  goes red. The comment there explains why flipping it to `true` is the wrong fix.
+- **Background:** it *was* `true` briefly (2026-07-26 → 2026-07-27). OpenZFS 2.4.3 refuses to configure
+  against a kernel newer than 7.0, and `aurora-dx:latest` had moved to Fedora 44's 7.1.x kernel:
 
   ```
   configure: error:
@@ -94,15 +90,25 @@ stated condition under which it should be deleted).
       *** The maximum supported kernel version is 7.0.
   ```
 
-  Fedora 44's `main` kernel is 7.1.x, so without this flag every `main` ZFS build fails at configure.
-  This is the same failure that broke `zfs-aurora-complex`'s nightly (runs 30148339311, 30192096209).
-- **Risk:** the flag disables an upstream compatibility gate. The module may build and still misbehave
-  against a kernel OpenZFS has not validated. Treat `main` ZFS builds as unvalidated until OpenZFS
-  declares support.
-- **Remove when:** an OpenZFS release in the configured `minor_version` line raises its maximum supported
-  kernel to at or above the Fedora `main` kernel. Check `META`'s `Linux-Maximum` in the OpenZFS tag being
-  built; when it covers the current `main` kernel, delete the `zfs.main` block and let it inherit
-  `zfs.default`.
+  `--enable-linux-experimental` got past it, but the consumer then switched to `aurora-dx:stable`
+  (kernel 7.0.12-201.fc44), inside the supported range, so the override was re-armed to `false`. The
+  flag suppresses OpenZFS's own refusal to build against an unvalidated kernel; with it set, a future
+  kernel bump past the ceiling silently produces an unvalidated module instead of failing loudly, and
+  consumers that gate on that failure lose their upstream-compat signal.
+- **Remove when:** never, unless upstream adds an equivalent. Set to `true` only as a deliberate,
+  temporary, documented exception — not to turn a red build green.
+
+### T2 — *(retired 2026-07-30)* ZFS akmod for the `main` kernel flavor
+
+Between 2026-07-26 and 2026-07-30 this fork added a `zfs` target to `images.43.main` / `images.44.main`
+(by merging in `*server-build-group-only-x86`) and published `ghcr.io/danathar/akmods-zfs:main-43` and
+`:main-44`. It has been **reverted** — `images.yaml` and `build-akmods-main.yml` are byte-identical to
+their pre-change state, and no such image was ever actually published (see operational state below).
+
+Kept as a note rather than deleted because the idea recurs: `zfs-aurora-complex` builds the ZFS akmod
+from this repo's *source* on every run, and publishing a prebuilt cache here looks like an obvious
+saving. It was dropped because that consumer builds fine without it, and an unconsumed daily image is
+pure cost. If you revisit it, the build itself is proven to work — see run 30206124460.
 
 ### T3 — Hardened OpenZFS release discovery
 
@@ -147,12 +153,40 @@ stated condition under which it should be deleted).
 
 ## Operational state (not a patch, but easy to lose)
 
-- The fork's build workflows were disabled by hand after the 2026-07-05 scheduled runs failed on a
-  transient `kojipkgs` truncation (`curl (18) end of response with ... bytes missing`) — a flake, not a
-  config fault. `Build MAIN akmods` has since been re-enabled; `CENTOS`, `COREOS-STABLE`,
-  `COREOS-TESTING`, `LONGTERM-6.18`, `OGC`, and `Cleanup Old Images` remain `disabled_manually`
-  deliberately, since nothing here consumes them.
-- No repository secrets are configured. `KERNEL_PRIVKEY` / `AKMOD_PRIVKEY_20230518` are absent, so
-  `build-prep.sh` falls back to the **test signing key** (`certs/*.priv.test`) and logs
-  `WARNING: Using test signing key.` `SIGNING_SECRET` is absent too, so pushed images are not
-  cosign-signed. Anything consuming these images must enroll the test key or not verify at all.
+### This fork builds and publishes nothing
+
+As of 2026-07-30, **all six `Build * akmods` workflows and `Cleanup Old Images` are
+`disabled_manually`.** No image has ever been pushed to `ghcr.io/danathar` — that namespace is empty.
+The fork is consumed as *source* by `zfs-aurora-complex`, which clones it and builds its own cache.
+
+`Build MAIN akmods` was briefly enabled (2026-07-26 → 2026-07-30) while testing the retired T2 target,
+then switched back off. This state lives in GitHub repository settings, not in any file here, so `git
+log` will never show it changing — which is exactly why it is written down.
+
+### Scheduled builds cannot succeed without the signing secrets
+
+This one costs an hour to rediscover. No repository secrets are configured, and the failure mode differs
+by trigger:
+
+- On **`pull_request`**, the `Retrieve Signing Key` step in `reusable-build.yml` is skipped. The
+  committed `certs/private_key.priv` stays 0 bytes, `build-prep.sh`'s `[[ ! -s ... ]]` test fires, and
+  the build falls back to the test key and succeeds with `WARNING: Using test signing key.`
+- On **`schedule`** / `workflow_dispatch` / `merge_group`, that step *runs* and writes an empty
+  `secrets.KERNEL_PRIVKEY` into `certs/private_key.priv` — producing a **1-byte** file. `-s` now passes,
+  so the test-key fallback never triggers, and the run dies in `fetch-kernel` with:
+
+  ```
+  OSSL_DECODER_from_bio:unsupported:...:No supported data to decode. Input type: PEM
+  error: Recipe `fetch-kernel` failed with exit code 1
+  ```
+
+  This kills the *kernel cache* job, before any akmod is built. Observed on runs 30318357041,
+  30412211886, 30503677867 (~2 min each).
+
+So a green PR check does **not** predict a green nightly. Enabling any scheduled build requires setting
+`KERNEL_PRIVKEY` and `AKMOD_PRIVKEY_20230518` first, or patching the `-s` guard to also reject
+whitespace-only key files. `SIGNING_SECRET` is absent too, so pushed images would not be cosign-signed
+either.
+
+Note the 2026-07-05 disabling had a *different* cause — a transient `kojipkgs` truncation
+(`curl (18) end of response with ... bytes missing`), a flake rather than a config fault.
