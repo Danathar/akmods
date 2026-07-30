@@ -27,11 +27,12 @@ The Scorecard badge above tracks the public OpenSSF result for `ublue-os/akmods`
 
 ## How it's organized
 
-> **This fork publishes no images.** Every `Build * akmods` workflow here is disabled, so nothing is
-> built or pushed to `ghcr.io/danathar`. The sections below describe upstream's images, and the
-> `ghcr.io/ublue-os/...` references in them are correct as written — pull those. This fork is consumed as
-> *source*, not as a registry. See [Why This Fork Exists](#why-this-fork-exists) and
-> [`FORK-PATCHES.md`](FORK-PATCHES.md).
+> **This fork's workflows publish no images.** Every `Build * akmods` workflow here is disabled, so
+> this repository's own CI builds and pushes nothing. `ghcr.io/danathar` is not empty, though —
+> `zfs-aurora-complex` drives this repo's `just push` to publish its own ZFS akmods cache there. The
+> sections below describe upstream's images, and the `ghcr.io/ublue-os/...` references in them are
+> correct as written — pull those. This fork is consumed as *source*, not as a registry. See
+> [Why This Fork Exists](#why-this-fork-exists) and [`FORK-PATCHES.md`](FORK-PATCHES.md).
 
 The [`akmods` images](https://github.com/orgs/ublue-os/packages?repo_name=akmods) are built and published daily by upstream. However, there's not a single image but several, given various kernels we now support.
 
