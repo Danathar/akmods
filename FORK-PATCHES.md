@@ -101,9 +101,13 @@ stated condition under which it should be deleted).
 ### T2 — *(retired 2026-07-30)* ZFS akmod for the `main` kernel flavor
 
 Between 2026-07-26 and 2026-07-30 this fork added a `zfs` target to `images.43.main` / `images.44.main`
-(by merging in `*server-build-group-only-x86`) and published `ghcr.io/danathar/akmods-zfs:main-43` and
-`:main-44`. It has been **reverted** — `images.yaml` and `build-akmods-main.yml` are byte-identical to
-their pre-change state, and no such image was ever actually published (see operational state below).
+(by merging in `*server-build-group-only-x86`) and configured it to publish as
+`ghcr.io/danathar/akmods-zfs:main-43` and `:main-44`. It has been **reverted** — the build-matrix
+entries are gone and `build-akmods-main.yml` is byte-identical to its pre-change state. `images.yaml`
+is not fully byte-identical to the pre-target tree: the `zfs.main` block and the `org: danathar`
+namespace change were both introduced in the same commit as this target, but they survive the revert
+on their own merits (see T1 and P1) rather than as leftovers of it. No image was ever actually
+published under this target — see operational state below.
 
 Kept as a note rather than deleted because the idea recurs: `zfs-aurora-complex` builds the ZFS akmod
 from this repo's *source* on every run, and publishing a prebuilt cache here looks like an obvious
