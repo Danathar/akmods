@@ -1,8 +1,21 @@
-# ublue-os akmods
+# akmods (Danathar fork)
 
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ublue-os/akmods/badge)](https://scorecard.dev/viewer/?uri=github.com/ublue-os/akmods)[![Build CENTOS akmods](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-centos.yml/badge.svg)](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-centos.yml)[![Build COREOS-STABLE akmods](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-coreos-stable.yml/badge.svg)](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-coreos-stable.yml)[![Build COREOS-TESTING akmods](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-coreos-testing.yml/badge.svg)](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-coreos-testing.yml)[![Build LONGTERM-6.18 akmods](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-longterm-6.18.yml/badge.svg)](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-longterm-6.18.yml)[![Build OGC akmods](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-ogc.yml/badge.svg)](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-ogc.yml)[![Build MAIN akmods](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-main.yml/badge.svg)](https://github.com/ublue-os/akmods/actions/workflows/build-akmods-main.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ublue-os/akmods/badge)](https://scorecard.dev/viewer/?uri=github.com/ublue-os/akmods)
 
 OCI images providing a set of cached kernel RPMs and extra kernel modules to Universal Blue images. Used for better hardware support and consistent build process.
+
+## Why This Fork Exists
+
+This is a personal fork of [`ublue-os/akmods`](https://github.com/ublue-os/akmods), kept in sync with upstream. It exists to feed [`zfs-aurora-complex`](https://github.com/Danathar/zfs-aurora-complex), which builds a signed Aurora DX image with ZFS kernel modules.
+
+`zfs-aurora-complex` doesn't consume a published image from here — its CI clones this repo's source at a resolved commit (by default it floats on this repo's `main`; it can pin to an exact commit in its own `ci/defaults.json` to freeze against an upstream regression or reproduce a past build) and builds the shared ZFS akmods cache directly from this repo's `Justfile` and `build_files/zfs` scripts. That means any commit pushed to this fork's `main` becomes the source for that repo's next build, so beyond mirroring upstream this fork carries a couple of load-bearing local patches:
+
+- `Justfile`: derive the published cache image name from `images.yaml`'s `.name` field (upstream hardcodes `akmods-<target>`), so the consuming repo controls the cache image name without patching the `Justfile` at build time
+- `build_files/zfs/build-kmod-zfs.sh`: hardened OpenZFS release discovery (GitHub token plumbing, xtrace/JSON-array guards) so the release lookup doesn't flake under CI
+
+See `zfs-aurora-complex`'s [`docs/akmods-fork-maintenance.md`](https://github.com/Danathar/zfs-aurora-complex/blob/main/docs/akmods-fork-maintenance.md) for the full sync and pin process.
+
+Everything else about how this repo works (kmod groups, kernels built, usage) matches upstream and is documented below.
 
 ## Supply-chain scorecard
 
@@ -14,7 +27,13 @@ The Scorecard badge above tracks the public OpenSSF result for `ublue-os/akmods`
 
 ## How it's organized
 
-The [`akmods` images](https://github.com/orgs/ublue-os/packages?repo_name=akmods) are built and published daily. However, there's not a single image but several, given various kernels we now support.
+> **This fork publishes no images.** Every `Build * akmods` workflow here is disabled, so nothing is
+> built or pushed to `ghcr.io/danathar`. The sections below describe upstream's images, and the
+> `ghcr.io/ublue-os/...` references in them are correct as written — pull those. This fork is consumed as
+> *source*, not as a registry. See [Why This Fork Exists](#why-this-fork-exists) and
+> [`FORK-PATCHES.md`](FORK-PATCHES.md).
+
+The [`akmods` images](https://github.com/orgs/ublue-os/packages?repo_name=akmods) are built and published daily by upstream. However, there's not a single image but several, given various kernels we now support.
 
 The akmods packages are divided up for building in a few different "groups":
 
