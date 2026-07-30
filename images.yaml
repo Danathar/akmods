@@ -167,12 +167,8 @@ images:
         - *server-build-group
   43:
     main:
-      # Fork customization: upstream builds no zfs akmod for `main`. This fork
-      # publishes one so zfs-aurora-complex can consume a ready-made cache image
-      # instead of rebuilding it from this repo's source on every run.
       !!merge <<:
         - *desktop-build-group-only-x86
-        - *server-build-group-only-x86
     ogc:
       !!merge <<:
         - *ogc-desktop-build-group-only-x86
@@ -182,10 +178,8 @@ images:
         - *server-build-group
   44:
     main:
-      # Fork customization: see the note on 43.main above.
       !!merge <<:
         - *desktop-build-group-only-x86
-        - *server-build-group-only-x86
     ogc:
       !!merge <<:
         - *ogc-desktop-build-group-only-x86
