@@ -153,6 +153,18 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
 - **Remove when:** `jq` is added to `RPMS_TO_INSTALL` in `build_files/prep/build-prep.sh` (upstream or
   here), which is the better place for it.
 
+### T6 — `git` in the build environment
+
+- **Files:** `build_files/prep/build-prep.sh` (`RPMS_TO_INSTALL`)
+- **What:** one added package, in the unconditional list.
+- **Why:** upstream's `c30f343` applies the 2.4.3 compatibility patches with `git apply`, but
+  `build-prep.sh` only installs `git` when `KERNEL_FLAVOR` matches `centos|coreos|longterm`. Upstream
+  never builds ZFS on the `main` flavor, so upstream never needs it there; this fork does, and the
+  build died with `git: command not found` (exit 127) on the first run after the merge. Same class of
+  gap as T5.
+- **Remove when:** upstream installs `git` for all flavors, stops using `git apply` (the patch block
+  is guarded to ZFS 2.4.3 and disappears once 2.4.4 ships), or starts building ZFS on `main` itself.
+
 ---
 
 ## Related
