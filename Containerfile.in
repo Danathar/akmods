@@ -20,10 +20,8 @@ ARG KMOD_REPO_ARG
 
 COPY certs /tmp/certs
 
-COPY files/usr/lib/systemd/system/ublue-nvctk-cdi.service /tmp/ublue-os-nvidia-addons/rpmbuild/SOURCES/ublue-nvctk-cdi.service
-COPY files/usr/lib/systemd/system/ublue-nvctk-cdi.service /tmp/ublue-os-ucore-nvidia/rpmbuild/SOURCES/ublue-nvctk-cdi.service
-COPY files/usr/lib/systemd/system-preset/70-ublue-nvctk-cdi.preset /tmp/ublue-os-nvidia-addons/rpmbuild/SOURCES/70-ublue-nvctk-cdi.preset
-COPY files/usr/lib/systemd/system-preset/70-ublue-nvctk-cdi.preset /tmp/ublue-os-ucore-nvidia/rpmbuild/SOURCES/70-ublue-nvctk-cdi.preset
+COPY files/usr/lib/systemd/system-preset/70-nvidia-cdi-refresh.preset /tmp/ublue-os-nvidia-addons/rpmbuild/SOURCES/70-nvidia-cdi-refresh.preset
+COPY files/usr/lib/systemd/system/nvidia-cdi-refresh.service.d/10-ublue-ordering.conf /tmp/ublue-os-nvidia-addons/rpmbuild/SOURCES/10-ublue-ordering.conf
 COPY files/etc/udev/rules.d/60-nvidia-extra-devices-pm.rules /tmp/ublue-os-nvidia-addons/rpmbuild/SOURCES/60-nvidia-extra-devices-pm.rules
 
 #ifndef CENTOS
@@ -33,6 +31,8 @@ ADD https://negativo17.org/repos/fedora-multimedia.repo \
     /tmp/ublue-os-akmods-addons/rpmbuild/SOURCES/negativo17-fedora-multimedia.repo
 ADD https://raw.githubusercontent.com/terrapkg/packages/f${VERSION}/anda/terra/release/terra.repo \
     /tmp/ublue-os-akmods-addons/rpmbuild/SOURCES/terra.repo
+ADD https://copr.fedorainfracloud.org/coprs/rok/cdemu/repo/fedora-${VERSION}/rok-cdemu-fedora-${VERSION}.repo \
+    /tmp/ublue-os-akmods-addons/rpmbuild/SOURCES/_copr_rok-cdemu.repo
 ADD https://raw.githubusercontent.com/terrapkg/packages/f${VERSION}/anda/terra/gpg-keys/RPM-GPG-KEY-terra${VERSION} \
     /tmp/ublue-os-akmods-addons/rpmbuild/SOURCES/RPM-GPG-KEY-terra${VERSION}
 #endif
@@ -88,6 +88,7 @@ RUN --mount=type=cache,dst=/var/cache/dnf \
 /tmp/build-kmod-framework-laptop.sh
 /tmp/build-kmod-openrazer.sh
 /tmp/build-kmod-v4l2loopback.sh
+/tmp/build-kmod-vhba.sh
 /tmp/build-kmod-wl.sh
 /tmp/build-kmod-xpadneo.sh
 /tmp/build-kmod-xone.sh
