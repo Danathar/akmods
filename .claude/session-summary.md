@@ -54,54 +54,56 @@ Entry format:
 
 ---
 
-## Current state (as of 2026-10-11, observed with gh/git)
+## Current state (as of 2026-10-12, observed with gh/git)
 
 - **What the repo is:** `Danathar/akmods`, a fork of `ublue-os/akmods` (builds
-  signed Fedora akmod RPMs into OCI cache images). `main` was at `fbb314c`
-  (`Install git so main-flavor ZFS builds can apply the 2.4.3 patches (#6)`,
-  merged 2026-08-11) before the ACMM slice PRs. `origin/main` is 23 commits
-  ahead of and 35 behind `upstream/main` (`cc75e3b`, 2026-10-08).
+  signed Fedora akmod RPMs into OCI cache images). `origin/main` is 29 commits
+  ahead of and 35 behind `upstream/main`; #59 (opened by `auto-issues.yml`)
+  tracks the sync.
 - **Fork patches:** P1 (`org: danathar`), P2 (`akmods_name` from
   `images.yaml`, `AKMODS_IMAGE_NAME` override), P3 (README), P4 (Scorecard
-  workflow), T1 (`zfs.main.linux_experimental: false`), T3 (authenticated
-  OpenZFS release lookup), T4 (`python3-cffi`), T5 (`jq`), T6 (`git`); T2 was
-  retired 2026-07-30. All in [../FORK-PATCHES.md](../FORK-PATCHES.md).
-- **Workflows:** `Build CENTOS|COREOS-STABLE|COREOS-TESTING|LONGTERM-6.18|MAIN|OGC
-  akmods` and `Cleanup Old Images` are `disabled_manually`; `build-akmod`,
-  `cache-kernel` (reusable) and `Scorecard supply-chain security` are active.
-  Repository secrets: none (`gh api repos/Danathar/akmods/actions/secrets`
-  total_count 0), so a scheduled build would write a 1-byte signing key and fail
-  in `fetch-kernel` ([memory](memory/empty-kernel-privkey-writes-a-one-byte-key.md)).
-  Repository rulesets: none.
+  workflow), P5 (the ACMM agent tooling, CI and governance files), T1
+  (`zfs.main.linux_experimental: false`), T3 (authenticated OpenZFS release
+  lookup), T4 (`python3-cffi`), T5 (`jq`), T6 (`git`); T2 was retired
+  2026-07-30. All in [../FORK-PATCHES.md](../FORK-PATCHES.md). `tests/unit/`
+  pins P1, P2, P4 and T1–T6.
+- **Build workflows:** `Build CENTOS|COREOS-STABLE|COREOS-TESTING|LONGTERM-6.18|MAIN|OGC
+  akmods` and `Cleanup Old Images` are `disabled_manually`. Repository secrets:
+  none, so a scheduled build would write a 1-byte signing key and fail in
+  `fetch-kernel` ([memory](memory/empty-kernel-privkey-writes-a-one-byte-key.md)).
+- **Checks and merging:** ruleset `protect main` (id `24902471`) is active and
+  requires seven checks: `Lint (shellcheck)`, `Lint (actionlint)`,
+  `Unit tests (bats)`, `E2E (fedora container)`, `Coverage gate`,
+  `Agent tooling (node --test)`, `policy-check`; the branch must be up to date
+  with `main`. See [../docs/branch-protection.md](../docs/branch-protection.md).
+  The Hive merge strategy (`hive-serialized`) is a dashboard setting the owner
+  sets; it was not set or read from this session.
+- **Scheduled workflows:** `nightly-compliance`, `agent-audit`, `pr-metrics`,
+  `auto-qa` and `auto-issues` each ran once by `workflow_dispatch` on
+  2026-10-12 and succeeded. `claude.yml` and `ai-fix.yml` have never run: no
+  `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` secret exists, so their agent
+  step is skipped.
+- **Local tooling:** `/usr/bin/just` 1.57 refuses this Justfile (`which()`
+  needs `set lists`); tests and CI use the pinned just 1.46.0 from
+  `tests/install-tools.sh`. Bare `node --test` skips dot-directories;
+  `scripts/tests/dot-claude.test.mjs` imports the `.claude/` tests so it runs
+  all of them.
 - **Consumer:** `Danathar/zfs-aurora-complex` clones this repo as source and runs
   its `just push`; "workflows disabled" does not mean the publish path is dead
   ([memory](memory/workflows-disabled-is-not-publish-dead.md)).
-- **ACMM rollout in flight:** the 46 open `[ACMM ...]` issues (#7-#52) are being
-  closed by slice PRs from `acmm/<slice>` branches: A `acmm/a` (#56: bats unit
-  suite, e2e, lint, coverage gate), B `acmm/b` (#53: agent instructions, prompts,
-  skills), C `acmm/c` (agent tooling: this file, `settings.json`, the guard hook,
-  memory, reflections), D1 `acmm/d1` (#55: risk tiers, policies, ruleset), D2
-  `acmm/d2` (#54: metrics, rubric, runbook), E (agent workflows). Nothing is
-  merged yet; the integrator adds one `FORK-PATCHES.md` entry for all ACMM files
-  afterwards. Re-check with `gh pr list -R Danathar/akmods`.
-- **Agent tooling:** `.claude/settings.json` registers
-  `.claude/hooks/guard-bash.mjs` on every Bash call and carries allow/ask/deny
-  permissions; `node --test` (run by `agent-tooling.yml` once slice A lands)
-  executes `.claude/hooks/tests/`.
 - **Not verified from this repository:** whether `zfs-aurora-complex` currently
   runs against `aurora-dx:stable`, and anything about the signing secrets'
   intended values.
 
-## Last session: 2026-10-11 - ACMM slice C (learning and safety tooling)
+## Last session: 2026-10-12 - ACMM issues #7-#52
 
-**Done:** nothing merged; the slice C PR adds the guard hook and tests,
-`settings.json`, `memory/` (six corrections from `FORK-PATCHES.md` history),
-this handoff file and two reflections (issues #19, #24, #25, #26, #27, #35, #36,
-#41).
-**In flight:** slice PRs #53-#56 plus the C and E PRs; all unmerged.
-**Blocked on:** review and merge order of the slice PRs (not decided here).
-**Watch:** the guard refuses `podman run` outright (no local containers), so
-`tests/e2e/run.sh` is CI-only; `Edit/Write(certs/**)` is denied in settings.
+**Done:** slice PRs #56, #53, #54, #55, #57, #58 merged (commits in
+[../docs/agent-tasks/2026-10-11.md](../docs/agent-tasks/2026-10-11.md));
+ruleset `24902471` applied; the handoff PR adds the P5 registry entry.
+**In flight:** nothing.
+**Blocked on:** #45 needs the owner to switch the Hive merge strategy to
+`hive-serialized` on the dashboard.
+**Watch:** #59, the first automated upstream-sync issue.
 
 ## Open threads
 
@@ -109,14 +111,15 @@ this handoff file and two reflections (issues #19, #24, #25, #26, #27, #35, #36,
   model at the top of the file). `just` recipes are refused by default (any
   recipe not under `--dry-run`/`--evaluate`/`--list`/`--show`); aliases, shell
   variables and scripts written then run are out of scope.
-- The next upstream merge is 35 commits behind; check that `main`-flavor ZFS
-  still has the tools `build-kmod-zfs.sh` calls
+- The next upstream merge is 35 commits behind (#59); check that `main`-flavor
+  ZFS still has the tools `build-kmod-zfs.sh` calls
   ([memory](memory/main-flavor-zfs-needs-git-and-jq.md)).
 
 ## Next steps
 
-1. Merge the slice PRs (owner decision), then have the merging session rewrite
-   this file from `origin/main`.
-2. Before enabling any `Build *` workflow, set `KERNEL_PRIVKEY`,
+1. Owner: set the Hive merge strategy for `akmods` to `hive-serialized` (#45),
+   then re-run the ACMM evaluation.
+2. Upstream sync (#59), walking `FORK-PATCHES.md`.
+3. Before enabling any `Build *` workflow, set `KERNEL_PRIVKEY`,
    `AKMOD_PRIVKEY_20230518` and `SIGNING_SECRET`, or harden the `-s` guard in
    `build-prep.sh`.

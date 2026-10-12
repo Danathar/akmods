@@ -1,22 +1,6 @@
 {
-    "$comment": "docs/risk-tiers.md is the human source; this file restates its tier table as data and scripts/check-policies.mjs fails when the two disagree (tier number, name, paths, required commands, review) or when a path matches no file in the repository. Tier 1 is the MOST dangerous tier. A file takes the most dangerous tier any of its globs matches. Paths are input to a classifier, not the classifier: a reviewer may raise a tier above the path match, never lower it. Unlisted files fall to default_tier (fail-closed: high). 'pending' lists globs owned by ACMM files that may not be in the tree yet; they are exempt from the must-match-a-file check and should be removed once everything has landed.",
+    "$comment": "docs/risk-tiers.md is the human source; this file restates its tier table as data and scripts/check-policies.mjs fails when the two disagree (tier number, name, paths, required commands, review) or when a path matches no file in the repository. Tier 1 is the MOST dangerous tier. A file takes the most dangerous tier any of its globs matches. Paths are input to a classifier, not the classifier: a reviewer may raise a tier above the path match, never lower it. Unlisted files fall to default_tier (fail-closed: high). An optional 'pending' list exempts globs for files that have not landed yet from the must-match-a-file check; remove each entry once its file is on main.",
     "default_tier": 2,
-    "pending": [
-        "AGENTS.md",
-        "CLAUDE.md",
-        ".github/copilot-instructions.md",
-        ".cursor/rules/**",
-        ".github/prompts/**",
-        ".claude/**",
-        ".claude/settings.json",
-        ".claude/hooks/**",
-        ".github/labeler.yml",
-        ".github/auto-qa-tuning.json",
-        "tests/**",
-        ".shellcheckrc",
-        ".editorconfig",
-        ".coverage-thresholds.json"
-    ],
     "tiers": [
         {
             "tier": 1,
