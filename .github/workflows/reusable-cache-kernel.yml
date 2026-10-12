@@ -46,11 +46,11 @@ concurrency:
 jobs:
   cache-kernel:
     name: Cache ${{ matrix.architecture }}
-    runs-on: ${{ matrix.architecture == 'x86_64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    runs-on: ${{ matrix.architecture == 'x86_64' && 'ubuntu-26.04' || 'ubuntu-26.04-arm' }}
     outputs:
       KCKEY: ${{ inputs.kernel_flavor }}-${{ steps.kernel-version.outputs.kernel_major_minor_patch }}
     container:
-      image: "ghcr.io/ublue-os/devcontainer:latest@sha256:74af83ac3b3fa573bee61d6d2d5ea5ba59f92f44afc3833d57b05ace66eb98ca"
+      image: "ghcr.io/ublue-os/devcontainer:latest@sha256:94c59f27eedf38c8355af271a512da46bc86893ea8178fefd4fd586ac3c29ef2"
       options: "--privileged --volume /var/lib/containers:/var/lib/containers --security-opt seccomp=unconfined --security-opt label=disable --user 0:0"
     permissions:
       actions: read
@@ -101,7 +101,7 @@ jobs:
         run: find ${{ steps.kernel-version.outputs.KCPATH }}
   check:
     name: Check all ${{ format('{0}-{1}', inputs.kernel_flavor, inputs.version) }} cache successful
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [cache-kernel]
     permissions:
       actions: read

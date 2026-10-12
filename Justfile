@@ -1,4 +1,5 @@
 set unstable := true
+set lists
 set dotenv-load := true
 
 podman := which('podman') || require('podman-remote')
@@ -10,7 +11,8 @@ KCWD := shell('mkdir -p $1 && echo $1', version_cache / 'KCWD')
 KCPATH := shell('mkdir -p $1 && echo $1', env('KCPATH', KCWD / 'rpms'))
 version_json := KCPATH / 'cache.json'
 builder := if kernel_flavor =~ 'centos' { 'quay.io/centos/centos:' + version } else { 'quay.io/fedora/fedora:' + version }
-ogc_image := "ghcr.io/opengamingcollective/kernel-packages-fedora:latest-fc" + version
+ogc_tag := if kernel_flavor == 'ogc-lts' { 'lts' } else { 'latest' }
+ogc_image := "ghcr.io/opengamingcollective/kernel-packages-fedora:" + ogc_tag + "-fc" + version
 
 
 # Inputs
@@ -36,10 +38,10 @@ zfs_configure_args := env(
     if zfs_linux_experimental == 'true' { '--enable-linux-experimental' } else { '' }
 )
 
-# Kernel Pin for coreos-stable (Maximum Version Cap)
-# Set to a specific kernel version (e.g., '6.17.12') to cap coreos-stable builds
-# Set to empty string '' for no pin (use latest kernel from upstream fedora-coreos:stable)
-# This gives maintainers a clear, version-controlled view of the current pin state
+# Kernel pin for coreos-stable (maximum version cap)
+# Empty '' follows upstream fedora-coreos:stable.
+# Set to major.minor.patch (e.g. '6.17.12') to hold all coreos-stable targets.
+# When to use this: README.md#pinning-the-coreos-stable-kernel
 coreos_stable_kernel_pin := ''
 
 # Check if valid
@@ -229,7 +231,7 @@ get-kernel-version:
             linux=$($dnf repoquery --whatprovides kernel-longterm | sort -V | tail -n1 | sed 's/.*://')
             kernel_name=kernel-longterm
             ;;
-        "ogc")
+        "ogc"|"ogc-lts")
             ogc_manifest=$(skopeo inspect --raw "docker://{{ ogc_image }}")
             linux=$(echo "$ogc_manifest" | jq -r '
                 .layers[].annotations["org.opencontainers.image.title"]
@@ -254,7 +256,7 @@ get-kernel-version:
     minor=$(echo "$linux" | cut -d '.' -f 2)
     patch=$(echo "$linux" | cut -d '.' -f 3)
     kernel_major_minor_patch="${major}.${minor}.${patch}"
-    if [[ "{{ kernel_flavor }}" == "ogc" ]]; then
+    if [[ "{{ kernel_flavor }}" =~ ^ogc ]]; then
         kernel_major_minor_patch=$(echo "$linux" | sed 's/\.fc.*$//')
     fi
     linux="$(echo $linux | tr -d '[:cntrl:]')"
@@ -565,6 +567,19 @@ generate-workflows:
             exit 1
         fi
 
+        # Preserve each flavor's already-assigned cron minute across regenerations so
+        # unrelated images.yaml/template edits don't produce spurious cron diffs. A
+        # flavor only gets a freshly randomized minute if it has no prior generated
+        # file (e.g. it's brand new, or a previous run was interrupted mid-rm).
+        declare -A cron_minutes=()
+        for f in ./.github/workflows/build-akmods-*.yml; do
+            [[ -e "$f" ]] || continue
+            flavor="$(basename "$f" .yml)"
+            flavor="${flavor#build-akmods-}"
+            minute=$(sed -n "s/.*cron: '\([0-9]\{1,2\}\) .*/\1/p" "$f")
+            [[ -n "$minute" ]] && cron_minutes[$flavor]="$minute"
+        done
+
         rm -f "./.github/workflows/build"*".yml"
 
         declare -A images=()
@@ -595,7 +610,8 @@ generate-workflows:
     # Generate the workflow by running `just generate-workflows` at git root
     # Modify the inputs in workflow-templates
     EOF
-            sed "s/AKMODs/${i^^} akmods/;s/05/$(printf '%02d' $(( RANDOM % 30)))/g" ./workflow-templates/workflow.yaml.in
+            minute="${cron_minutes[$i]:-$(printf '%02d' $(( RANDOM % 30 )))}"
+            sed "s/AKMODs/${i^^} akmods/;s/%%CRON_MINUTE%%/$minute/g" ./workflow-templates/workflow.yaml.in
 
             echo "jobs:"
             for j in "${!workflows[@]}"; do

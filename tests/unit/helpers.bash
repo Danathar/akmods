@@ -7,8 +7,9 @@
 REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
 export REPO_ROOT
 
-# `just` >= 1.57 rejects this Justfile (see tests/install-tools.sh). JUST_BIN lets
-# a developer point at the pinned binary when the system one is newer.
+# Only the pinned `just` is verified against this Justfile (see
+# tests/install-tools.sh). JUST_BIN lets a developer point at it when the system
+# one differs.
 JUST_BIN="${JUST_BIN:-just}"
 
 # Same yq flag the Justfile uses; stderr (a deprecation warning on some yq

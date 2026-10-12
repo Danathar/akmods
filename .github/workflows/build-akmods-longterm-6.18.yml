@@ -13,7 +13,7 @@ on:
     paths-ignore:
       - '**.md'
   schedule:
-    - cron: '23 0 * * *'  # 0023 UTC everyday
+    - cron: '23 0 * * *'  # staggered minute past 00:00 UTC, see Justfile generate-workflows
   workflow_dispatch:
 jobs:
   cache_kernel_longterm-6-18_44:
@@ -26,40 +26,6 @@ jobs:
       packages: write
     with:
       architecture: '["aarch64","x86_64"]'
-      kernel_flavor: longterm-6.18
-      version: 44
-  build-longterm-6-18_44_nvidia-lts:
-    name: Build nvidia-lts longterm-6.18 (44)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_longterm-6-18_44
-    with:
-      akmods_target: nvidia-lts
-      architecture: '["aarch64","x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_longterm-6-18_44.outputs.KCKEY }}
-      kernel_flavor: longterm-6.18
-      version: 44
-  build-longterm-6-18_44_nvidia-open:
-    name: Build nvidia-open longterm-6.18 (44)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_longterm-6-18_44
-    with:
-      akmods_target: nvidia-open
-      architecture: '["aarch64","x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_longterm-6-18_44.outputs.KCKEY }}
       kernel_flavor: longterm-6.18
       version: 44
   build-longterm-6-18_44_zfs:
@@ -84,8 +50,8 @@ jobs:
     permissions:
       actions: read
       contents: read
-    needs: [build-longterm-6-18_44_nvidia-lts,build-longterm-6-18_44_nvidia-open,build-longterm-6-18_44_zfs]
-    runs-on: ubuntu-24.04
+    needs: [build-longterm-6-18_44_zfs]
+    runs-on: ubuntu-26.04
     if: always()
     steps:
       - name: Check for Build Failures

@@ -1,0 +1,7 @@
+# actionlint 1.7.12 (the newest release, pinned in ci.yml and
+# nightly-compliance.yml) predates GitHub's ubuntu-26.04 hosted runner, which
+# upstream ublue-os/akmods now uses. Declare it so the label check passes; drop
+# this once a pinned actionlint knows the label.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

@@ -3,7 +3,7 @@
 set ${CI:+-x} -euo pipefail
 
 pushd /tmp/kernel_cache
-KERNEL_VERSION=$(find "$KERNEL_NAME"-*.rpm | grep "$(uname -m)" | grep -P "$KERNEL_NAME-\d+\.\d+\.\d+-\w+.*$(rpm -E '%{dist}')" | sed -E "s/$KERNEL_NAME-//;s/\.rpm//")
+KERNEL_VERSION=$(find "$KERNEL_NAME"-*.rpm | grep "$(uname -m)" | grep -P "$KERNEL_NAME-\d+\.\d+(\.\d+)?-\w+.*$(rpm -E '%{dist}')" | sed -E "s/$KERNEL_NAME-//;s/\.rpm//")
 popd
 
 ### PREPARE REPOS
@@ -16,7 +16,7 @@ if [[ "${KERNEL_FLAVOR}" =~ "centos" ]]; then
 else
     echo "Building for Fedora"
     RELEASE="$(rpm -E '%fedora')"
-    sed -i 's@enabled=1@enabled=0@g' /etc/yum.repos.d/fedora-cisco-openh264.repo
+    dnf config-manager setopt fedora-cisco-openh264.enabled=0
     dnf config-manager addrepo --from-repofile=https://negativo17.org/repos/fedora-multimedia.repo
 fi
 
@@ -38,7 +38,7 @@ if [[ "${RELEASE}" -ge 45 && -f /etc/fedora-release ]]; then
     # pre-release rpmfusion is in a different location
     sed -i "s%free/fedora/releases%free/fedora/development%" /etc/yum.repos.d/rpmfusion-*.repo
     # pre-release rpmfusion needs to enable testing
-    sed -i '0,/enabled=0/{s/enabled=0/enabled=1/}' /etc/yum.repos.d/rpmfusion-*-updates-testing.repo
+    dnf config-manager enable rpmfusion-free-updates-testing rpmfusion-nonfree-updates-testing
 fi
 
 if [[ -f $(find /tmp/akmods-rpms/kmods/kmod-nvidia-*.rpm) ]]; then

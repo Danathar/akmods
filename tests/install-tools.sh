@@ -3,17 +3,17 @@
 # into a directory (default: $HOME/.local/bin) after verifying their SHA-256.
 #
 # Why pinned and not the distro packages:
-#   * The Justfile calls `which()`, which `just` >= 1.57 rejects without
-#     `set lists` ("the `which()` function requires `set lists`"). 1.46.0 is
-#     the newest release verified to evaluate this Justfile.
+#   * The Justfile uses `set lists` (added upstream so `which()` keeps working
+#     on `just` >= 1.57), which older releases reject ("Unknown setting
+#     `lists`"). 1.58.0 is the release verified to evaluate this Justfile.
 #   * The Justfile passes `--yaml-fix-merge-anchor-to-spec` to yq, which only
 #     mikefarah/yq (Go) understands, and only in recent releases.
 #
 # Usage: tests/install-tools.sh [dest-dir]
 set -euo pipefail
 
-JUST_VERSION="1.46.0"
-JUST_SHA256="79966e6e353f535ee7d1c6221641bcc8e3381c55b0d0a6dc6e54b34f9db36eaa"
+JUST_VERSION="1.58.0"
+JUST_SHA256="4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d"
 YQ_VERSION="v4.54.1"
 YQ_SHA256="8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f"
 

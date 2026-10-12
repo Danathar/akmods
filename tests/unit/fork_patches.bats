@@ -43,11 +43,11 @@ setup() {
 
 # covers: P2
 @test "P2: akmods_name is not derived from the target name" {
-    export AKMODS_TARGET=nvidia-lts
+    export AKMODS_KERNEL=coreos-stable AKMODS_TARGET=zfs
     run just_eval akmods_name
     [ "${status}" -eq 0 ]
-    [ "${output}" = "$(yq '.images."44".main."nvidia-lts".name' "${WORK}/images.yaml")" ]
-    yq -i '.images."44".main."nvidia-lts".name = "renamed-by-config"' "${WORK}/images.yaml"
+    [ "${output}" = "$(yq '.images."44"."coreos-stable".zfs.name' "${WORK}/images.yaml")" ]
+    yq -i '.images."44"."coreos-stable".zfs.name = "renamed-by-config"' "${WORK}/images.yaml"
     run just_eval akmods_name
     [ "${output}" = "renamed-by-config" ]
 }
@@ -132,4 +132,14 @@ setup() {
 @test "P4: scorecard workflow and summary script exist" {
     [ -f "${REPO_ROOT}/.github/workflows/scorecard.yml" ]
     [ -f "${REPO_ROOT}/.github/scripts/scorecard-summary.sh" ]
+}
+
+# covers: P6
+@test "P6: images.yaml defines no nvidia targets and no ogc kernel flavors" {
+    run yq -r '[explode(.).images.*.* | keys | .[]] | unique | join(",")' "${REPO_ROOT}/images.yaml"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" != *nvidia* ]]
+    run yq -r '[.images.* | keys | .[]] | unique | join(",")' "${REPO_ROOT}/images.yaml"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" != *ogc* ]]
 }

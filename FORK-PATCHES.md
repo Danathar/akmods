@@ -68,9 +68,12 @@ stated condition under which it should be deleted).
 ### P4 — OpenSSF Scorecard workflow
 
 - **Files:** `.github/workflows/scorecard.yml`, `.github/scripts/scorecard-summary.sh`
-- **What:** entirely fork-local. Runs Scorecard on push to `main`, weekly, and on branch-protection
+- **What:** upstream ships its own `scorecard.yml`; the fork adds the summary script and the steps
+  that run it (~27 added lines). Runs Scorecard on push to `main`, weekly, and on branch-protection
   changes; uploads SARIF and writes a readable Markdown summary into the run.
-- **Merge note:** upstream has no equivalent, so this should never conflict.
+- **Merge note:** upstream's edits to `scorecard.yml` are almost always Renovate digest bumps, which
+  auto-merge next to the fork's added steps. Take upstream's pins, keep the summary steps.
+  `scorecard-summary.sh` is fork-only and never conflicts.
 
 ### P5 — Agent tooling, CI checks and governance (ACMM)
 
@@ -98,6 +101,24 @@ stated condition under which it should be deleted).
   or `policy-check.yml` blocks every merge until the ruleset is updated (procedure in
   `docs/branch-protection.md`). Adding a patch to this file without a `# covers:` bats test fails the
   `Coverage gate` check unless it is exempted in `.coverage-thresholds.json`.
+
+### P6 — No nvidia targets and no OGC kernel flavors
+
+- **Files:** `images.yaml` (build groups and `images:`), and through `just generate-workflows` the
+  generated `.github/workflows/build-akmods-*.yml` (`build-akmods-ogc.yml` and
+  `build-akmods-ogc-lts.yml` no longer exist).
+- **What:** the `nvidia-lts` and `nvidia-open` targets, the `ogc` and `ogc-lts` kernel flavors, the
+  `extra` target (only the OGC groups used it), and the anchors only they referenced are removed. What
+  is left: `common` on `main` / `coreos-*`, and `zfs` on `centos` / `coreos-*` / `longterm-6.18`.
+  The `build_files/nvidia/`, `fetch-kernel.sh` OGC branch and `Justfile` nvidia/OGC logic stay
+  untouched, so upstream merges of those files never conflict.
+- **Why:** nothing here uses them. `zfs-aurora-complex` builds only `main.zfs`, which it injects itself
+  (see P2). Their third-party package repos break often, and that kept upstream syncs red for reasons
+  unrelated to this fork. In the #66 sync, negativo17's F45 `nvidia-580` repo had mismatched driver and
+  kmod versions, and the Terra mirror served stale metadata for `akmod-openrazer` on `ogc-lts`.
+- **Merge note:** upstream edits to these groups, or a new nvidia target or OGC flavor, conflict here or
+  come back silently through a group upstream adds. Drop them again, then run `just generate-workflows`.
+  `tests/unit/fork_patches.bats` (P6) fails if either one comes back.
 
 ---
 
@@ -156,6 +177,12 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
   2. disables `xtrace` around token handling so CI's `set -x` cannot echo the token into the job log;
   3. asserts the response is a JSON array before parsing, and prints the body on failure;
   4. fails loudly when no release matches `zfs-<minor>` instead of silently producing an empty version.
+
+  Upstream's #590 (merged here in the #59 sync) added its own `CURL` array with
+  `--retry 5 --retry-delay 5 --retry-all-errors` and rewrote the same lines. That collides with this
+  patch. The conflict was resolved by keeping all four changes above, adding upstream's retry flags to
+  `curl_args`, and defining upstream's `CURL` array just above the xtrace guard, because the tarball
+  and signature downloads further down use it.
 - **Why:** the anonymous GitHub API allows 60 requests/hour per IP. On shared CI runners that budget is
   routinely exhausted, and the API then returns a rate-limit *object* rather than an array. Upstream's
   `jq` then yields an empty `ZFS_VERSION` and the build fails much later with a confusing error.
@@ -203,7 +230,7 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
 
 ### This fork's own workflows build and publish nothing
 
-As of 2026-07-30, **all six `Build * akmods` workflows and `Cleanup Old Images` are
+As of 2026-07-30, **all `Build * akmods` workflows and `Cleanup Old Images` are
 `disabled_manually`**, so nothing is built or pushed by any workflow *in this repository*.
 
 That is not the same as `ghcr.io/danathar` being empty, which this section previously claimed. The

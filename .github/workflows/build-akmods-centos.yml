@@ -13,7 +13,7 @@ on:
     paths-ignore:
       - '**.md'
   schedule:
-    - cron: '25 0 * * *'   # 0025 UTC everyday
+    - cron: '25 0 * * *'  # staggered minute past 00:00 UTC, see Justfile generate-workflows
   workflow_dispatch:
 jobs:
   cache_kernel_centos_10:
@@ -26,40 +26,6 @@ jobs:
       packages: write
     with:
       architecture: '["aarch64","x86_64"]'
-      kernel_flavor: centos
-      version: 10
-  build-centos_10_nvidia-lts:
-    name: Build nvidia-lts centos (10)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_centos_10
-    with:
-      akmods_target: nvidia-lts
-      architecture: '["aarch64","x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_centos_10.outputs.KCKEY }}
-      kernel_flavor: centos
-      version: 10
-  build-centos_10_nvidia-open:
-    name: Build nvidia-open centos (10)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_centos_10
-    with:
-      akmods_target: nvidia-open
-      architecture: '["aarch64","x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_centos_10.outputs.KCKEY }}
       kernel_flavor: centos
       version: 10
   build-centos_10_zfs:
@@ -84,8 +50,8 @@ jobs:
     permissions:
       actions: read
       contents: read
-    needs: [build-centos_10_nvidia-lts,build-centos_10_nvidia-open,build-centos_10_zfs]
-    runs-on: ubuntu-24.04
+    needs: [build-centos_10_zfs]
+    runs-on: ubuntu-26.04
     if: always()
     steps:
       - name: Check for Build Failures
