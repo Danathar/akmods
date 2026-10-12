@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { computeMetrics, isAgentPR, isRevert, median, parseArgs, renderMarkdown, run } from '../pr-metrics.mjs';
@@ -73,8 +73,9 @@ test('parseArgs validates', () => {
   assert.equal(parseArgs(['--stdout']).stdout, true);
 });
 
-test('run reads a file input and writes md + json', () => {
+test('run reads a file input and writes md + json', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'prm-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const input = join(dir, 'prs.json');
   writeFileSync(input, JSON.stringify([pr(1), pr(2, { merged_at: null })]));
   const { metrics } = run(['--input', input, '--out-dir', dir, '--date', '2026-10-11'], { now: () => new Date('2026-10-11T00:00:00Z') });
