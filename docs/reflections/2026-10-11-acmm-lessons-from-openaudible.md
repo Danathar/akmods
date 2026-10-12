@@ -51,4 +51,7 @@ material, and they in turn drew on `Danathar/tududi#53` and `#60`.
 - Fail closed for anything not on the allowlist (unknown `gh` groups, any
   recipe not under `--dry-run`); add the specific message second.
 - Keep `node --test` as the single command that runs hook tests, so CI
-  (`agent-tooling.yml`) and local runs agree.
+  (`agent-tooling.yml`) and local runs agree. Bare `node --test` skips
+  dot-directories: on this repository's first CI run it found 46 tests and
+  none of the hook's, which `scripts/tests/dot-claude.test.mjs` now imports.
+  Check a new test file by its count in the run, not by the run being green.
