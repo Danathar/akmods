@@ -1,0 +1,37 @@
+# EditorConfig (https://editorconfig.org). Matches the indentation already used
+# in the repo: 4 spaces in the Justfile and shell scripts, 2 in YAML and JSON,
+# tabs only in .devcontainer.json.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[Justfile]
+indent_size = 4
+
+[*.{sh,bash,bats}]
+indent_size = 4
+
+[*.mjs]
+indent_size = 4
+
+[*.{yml,yaml,yaml.in,json}]
+indent_size = 2
+
+[.devcontainer.json]
+indent_style = tab
+
+[*.md]
+# Trailing double-space is a Markdown line break.
+trim_trailing_whitespace = false
+
+[LICENSE]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = false
+insert_final_newline = unset
