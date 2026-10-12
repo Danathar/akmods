@@ -1,0 +1,38 @@
+name: Agent tooling
+
+# Runs the dependency-free Node built-in tests (`node --test` discovers every
+# **/*.test.mjs from the repo root): the Claude Code hooks under .claude/hooks/
+# tests and the helper scripts under scripts/tests. Other slices add test files
+# without touching this workflow. No path filter, so the check always reports.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: agent-tooling-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  node-tests:
+    name: Agent tooling (node --test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Run node tests
+        run: node --test

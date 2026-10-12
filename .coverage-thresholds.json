@@ -1,0 +1,17 @@
+{
+    "$comment": "Shell 'coverage' gate for the akmods fork. kcov cannot measure this repo's real logic (it lives in Justfile recipes and in container-only build scripts), so the gate measures what actually protects the fork: the share of testable patches in FORK-PATCHES.md that carry a `# covers: <id>` tag on a bats test in tests/unit. Enforced by scripts/coverage-gate.mjs via .github/workflows/coverage-gate.yml. 'measured' was 8/8 active non-exempt patches on the commit that introduced this file. Floors only go up; a human edits this file. Add a patch to FORK-PATCHES.md without a test and the gate fails unless you list it in `exempt` with a reason.",
+    "registry": "FORK-PATCHES.md",
+    "testsDir": "tests/unit",
+    "patches": {
+        "measured": { "percent": 100 },
+        "floor": { "percent": 100 },
+        "exempt": {
+            "P3": "README prose; no behaviour to assert."
+        },
+        "extraTags": ["GEN"]
+    },
+    "bats": {
+        "measured": { "tests": 29 },
+        "floor": { "tests": 25 }
+    }
+}
