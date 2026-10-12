@@ -1,0 +1,7 @@
+[
+  {"tag_name": "zfs-2.5.0-rc1", "prerelease": true, "draft": false},
+  {"tag_name": "zfs-2.4.9", "prerelease": false, "draft": true},
+  {"tag_name": "zfs-2.4.3", "prerelease": false, "draft": false},
+  {"tag_name": "zfs-2.4.2", "prerelease": false, "draft": false},
+  {"tag_name": "zfs-2.3.6", "prerelease": false, "draft": false}
+]
