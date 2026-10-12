@@ -1,0 +1,49 @@
+name: PR metrics
+
+# Weekly PR acceptance / time-to-merge / agent-vs-human / revert report.
+# Read-only: results go to the job summary and a workflow artifact. Committing a
+# snapshot to docs/metrics/ is a deliberate, reviewed PR (see docs/metrics/README.md).
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Only count PRs closed on/after this date (YYYY-MM-DD); empty = all history'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  pr-metrics:
+    name: PR metrics
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compute metrics
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SINCE: ${{ inputs.since }}
+        run: |
+          set -euo pipefail
+          args=(--repo "$REPO" --out-dir "$RUNNER_TEMP/pr-metrics")
+          if [[ -n "$SINCE" ]]; then args+=(--since "$SINCE"); fi
+          node scripts/pr-metrics.mjs "${args[@]}"
+          cat "$RUNNER_TEMP"/pr-metrics/*.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload snapshot
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-metrics
+          path: ${{ runner.temp }}/pr-metrics/
+          if-no-files-found: error
