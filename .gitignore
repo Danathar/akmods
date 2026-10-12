@@ -2,3 +2,6 @@ certs/private_key.priv.prod
 certs/public_key.der.prod
 .env
 build
+
+# Agent tooling: per-user Claude Code overrides (never committed)
+.claude/settings.local.json

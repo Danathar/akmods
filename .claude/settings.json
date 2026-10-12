@@ -1,0 +1,81 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "permissions": {
+        "allow": [
+            "Bash(npx --yes bats@1.11.1 tests/unit:*)",
+            "Bash(shellcheck:*)",
+            "Bash(actionlint:*)",
+            "Bash(bash -n:*)",
+            "Bash(node --test)",
+            "Bash(node --test scripts/tests/)",
+            "Bash(node --test .claude/hooks/tests)",
+            "Bash(node --test .claude/hooks/tests/)",
+            "Bash(just --list:*)",
+            "Bash(just --evaluate:*)",
+            "Bash(just --dry-run:*)",
+            "Bash(just --show:*)",
+            "Bash(just --summary:*)",
+            "Bash(yq:*)",
+            "Bash(jq:*)",
+            "Bash(git status:*)",
+            "Bash(git diff:*)",
+            "Bash(git log:*)",
+            "Bash(git show:*)",
+            "Bash(git branch:*)",
+            "Bash(git fetch:*)"
+        ],
+        "ask": [
+            "Bash(git push:*)",
+            "Edit(.github/workflows/**)",
+            "Write(.github/workflows/**)",
+            "Edit(images.yaml)",
+            "Write(images.yaml)",
+            "Edit(Justfile)",
+            "Write(Justfile)",
+            "Edit(build_files/**)",
+            "Write(build_files/**)",
+            "Edit(Containerfile.in)",
+            "Write(Containerfile.in)",
+            "Edit(FORK-PATCHES.md)",
+            "Write(FORK-PATCHES.md)"
+        ],
+        "deny": [
+            "Bash(just build:*)",
+            "Bash(just test:*)",
+            "Bash(just fetch-kernel:*)",
+            "Bash(just push:*)",
+            "Bash(just manifest:*)",
+            "Bash(just clean:*)",
+            "Bash(git push --force:*)",
+            "Bash(git push -f:*)",
+            "Bash(git push --force-with-lease:*)",
+            "Bash(git push upstream:*)",
+            "Bash(git reset --hard:*)",
+            "Bash(sudo:*)",
+            "Bash(dnf install:*)",
+            "Bash(rpm-ostree install:*)",
+            "Bash(rpm -i:*)",
+            "Bash(rpm -U:*)",
+            "Bash(podman build:*)",
+            "Bash(podman push:*)",
+            "Bash(podman login:*)",
+            "Bash(podman system prune:*)",
+            "Bash(cosign sign:*)",
+            "Edit(certs/**)",
+            "Write(certs/**)"
+        ]
+    },
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.mjs\""
+                    }
+                ]
+            }
+        ]
+    }
+}
