@@ -13,9 +13,9 @@ GUARD="${REPO_ROOT}/.github/scripts/check-upstream-sync.sh"
 
 setup() {
     require_tools git
-    cd "${BATS_TEST_TMPDIR}"
+    cd "${BATS_TEST_TMPDIR}" || return
     git init -q -b main graph
-    cd graph
+    cd graph || return
     commit() { git -c user.name=t -c user.email=t@t commit -q --allow-empty -m "$1"; git rev-parse HEAD; }
     commit root >/dev/null
     git switch -q -c upstream
