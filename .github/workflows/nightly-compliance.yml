@@ -1,0 +1,221 @@
+name: Nightly compliance
+
+# Runs the repository's contract checks every night against main, so drift in
+# the outside world (new runner image, new shellcheck, an upstream merge that
+# silently reverted a patch) is noticed without a pull request. The jobs repeat
+# ci.yml's commands (same pinned tools) rather than calling it:
+#   - bats unit tests (tests/unit; this includes the generate-workflows drift
+#     test, tests/unit/generated_workflows.bats, and the fork-patch guards)
+#   - node --test
+#   - shellcheck via tests/lint-shellcheck.sh (two tiers)
+#   - actionlint
+#   - node scripts/check-policies.mjs
+#   - tests/e2e/run.sh in a Fedora container (no kernel download, no build)
+#
+# On a scheduled or manual run on main the `report` job keeps ONE tracking
+# issue: it opens or comments on it when any check failed, and closes it when
+# every check passes again. Nothing here builds or publishes an image.
+#
+# Flaky checks: the bats, node and policy steps retry up to
+# `workflows["nightly-compliance.yml"].retries` times (default 0), a value the
+# weekly Auto-QA workflow proposes changes to; see .github/auto-qa-tuning.json.
+
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-compliance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit tests (bats)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install bats and pinned just/yq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bats jq
+          tests/install-tools.sh "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run bats unit tests
+        run: |
+          set -euo pipefail
+          retries=$(jq -r '.workflows["nightly-compliance.yml"].retries // 0' .github/auto-qa-tuning.json)
+          attempt=0
+          until bats --tap tests/unit; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -gt "$retries" ]; then exit 1; fi
+            echo "::warning::bats failed; retry $attempt of $retries"
+          done
+
+  node:
+    name: Node tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: node --test
+        run: |
+          set -euo pipefail
+          retries=$(jq -r '.workflows["nightly-compliance.yml"].retries // 0' .github/auto-qa-tuning.json)
+          attempt=0
+          until node --test; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -gt "$retries" ]; then exit 1; fi
+            echo "::warning::node --test failed; retry $attempt of $retries"
+          done
+
+  shellcheck:
+    name: Lint (shellcheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned shellcheck
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/shellcheck.tar.xz" \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-${SHELLCHECK_VERSION}" >> "$GITHUB_PATH"
+
+      - name: shellcheck (two tiers, see .shellcheckrc)
+        run: |
+          shellcheck --version
+          tests/lint-shellcheck.sh
+
+  actionlint:
+    name: Lint (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint v1.7.12 (checksum-verified)
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+
+      - name: actionlint
+        run: '"$RUNNER_TEMP/actionlint" -color'
+
+  policies:
+    name: Policy check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: node scripts/check-policies.mjs
+        run: |
+          set -euo pipefail
+          retries=$(jq -r '.workflows["nightly-compliance.yml"].retries // 0' .github/auto-qa-tuning.json)
+          attempt=0
+          until node scripts/check-policies.mjs; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -gt "$retries" ]; then exit 1; fi
+            echo "::warning::check-policies failed; retry $attempt of $retries"
+          done
+
+  e2e:
+    name: E2E (fedora container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: registry.fedoraproject.org/fedora:latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run end-to-end tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash tests/e2e/run.sh
+
+  report:
+    name: Open, update or close the tracking issue
+    needs: [unit, node, shellcheck, actionlint, policies, e2e]
+    if: ${{ always() && github.ref == 'refs/heads/main' && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'Nightly compliance failing'
+          UNIT: ${{ needs.unit.result }}
+          NODE: ${{ needs.node.result }}
+          SHELLCHECK: ${{ needs.shellcheck.result }}
+          ACTIONLINT: ${{ needs.actionlint.result }}
+          POLICIES: ${{ needs.policies.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          set -euo pipefail
+          # List rather than search: the search index lags, and `in:title` is
+          # a word match. Match the exact title AND the Actions bot as author,
+          # so an issue anyone else opens with this title is never reused.
+          existing=$(gh issue list --repo "$GH_REPO" --state open --limit 1000 --json number,title,author \
+            --jq '[.[] | select(.title == env.TITLE and (.author.login == "app/github-actions" or .author.login == "github-actions[bot]" or .author.login == "github-actions"))][0].number // empty')
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          failed=""
+          for pair in "bats unit tests:$UNIT" "node --test:$NODE" "shellcheck:$SHELLCHECK" "actionlint:$ACTIONLINT" "policy check:$POLICIES" "e2e:$E2E"; do
+            [ "${pair#*:}" = "success" ] || failed="$failed ${pair%%:*} (${pair#*:});"
+          done
+          if [ -z "$failed" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close --repo "$GH_REPO" "$existing" --comment "Nightly compliance is green again ($run_url). Closing."
+            fi
+            echo "All nightly checks passed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          body=$(printf 'The nightly compliance run failed on %s.\n\nChecks that did not pass:%s\n\nRun: %s\n\nThis issue closes itself when a nightly run passes every check.\n' \
+            "$(date -u +%Y-%m-%d)" "$failed" "$run_url")
+          if [ -n "$existing" ]; then
+            gh issue comment --repo "$GH_REPO" "$existing" --body "$body"
+          else
+            gh label create nightly-compliance --repo "$GH_REPO" --color d93f0b \
+              --description 'Opened by the Nightly compliance workflow' 2>/dev/null || true
+            gh issue create --repo "$GH_REPO" --title "$TITLE" --label nightly-compliance --label bug --body "$body"
+          fi

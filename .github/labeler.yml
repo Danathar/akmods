@@ -1,0 +1,104 @@
+# Path to label map for actions/labeler (.github/workflows/labeler.yml).
+# Labels that do not exist yet are created by the labeler on first use (default
+# colour, no description); create them by hand first to set both.
+#
+# Every glob here must match at least one tracked file, or the rule is dead and
+# nobody notices: scripts/tests/labeler-globs.test.mjs enforces it. A path may
+# be listed under several labels (a change to build-kmod-zfs.sh is both
+# area/zfs and area/fork-patches).
+
+# Per-akmod build scripts under build_files/ (one directory per akmod family).
+'area/zfs':
+  - changed-files:
+      - any-glob-to-any-file: 'build_files/zfs/**'
+
+'area/nvidia':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'build_files/nvidia/**'
+          - 'files/**'
+
+'area/common':
+  - changed-files:
+      - any-glob-to-any-file: 'build_files/common/**'
+
+'area/extra':
+  - changed-files:
+      - any-glob-to-any-file: 'build_files/extra/**'
+
+# Build plumbing shared by every akmod: kernel fetch, container build, the
+# prep/post/test stages, and the generated build workflows and their templates.
+'area/build':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'build_files/prep/**'
+          - 'build_files/post/**'
+          - 'build_files/test/**'
+          - 'Containerfile.in'
+          - 'Justfile'
+          - 'fetch-kernel.sh'
+          - 'images.yaml'
+          - 'workflow-templates/**'
+          - '.github/workflows/build-akmods-*.yml'
+          - '.github/workflows/reusable-*.yml'
+          - '.github/workflows/cleanup.yml'
+
+# Anything FORK-PATCHES.md lists: review these against upstream before merging.
+'area/fork-patches':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'FORK-PATCHES.md'
+          - 'images.yaml'
+          - 'Justfile'
+          - 'Containerfile.in'
+          - 'build_files/prep/build-prep.sh'
+          - 'build_files/zfs/build-kmod-zfs.sh'
+
+'area/signing':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'certs/**'
+          - 'cosign.pub'
+
+'area/tests':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**'
+          - 'scripts/tests/**'
+
+'area/ci':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/scripts/**'
+          - '.github/labeler.yml'
+          - '.github/auto-qa-tuning.json'
+          - 'scripts/**'
+          - 'renovate.json'
+          - '.shellcheckrc'
+          - '.editorconfig'
+          - '.coverage-thresholds.json'
+          - 'risk-config.json'
+
+'area/docs':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '*.md'
+
+# Agent directions and the automation that runs or audits agents.
+'area/agents':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'AGENTS.md'
+          - 'CLAUDE.md'
+          - 'CONTRIBUTING.md'
+          - '.github/copilot-instructions.md'
+          - '.cursor/**'
+          - '.claude/**'
+          - '.github/prompts/**'
+          - 'policies/**'
+          - '.github/workflows/claude.yml'
+          - '.github/workflows/ai-fix.yml'
+          - '.github/workflows/agent-audit.yml'
+          - 'scripts/ai-audit-report.mjs'

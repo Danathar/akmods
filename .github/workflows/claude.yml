@@ -1,0 +1,196 @@
+# Claude Code on demand: a maintainer mentions `@claude` in an issue comment,
+# a PR conversation comment, or a PR review comment, and the Claude Code
+# GitHub Action answers or makes the change on a branch of Danathar/akmods.
+#
+# Gating, in order:
+#   1. `if:` skips (grey run, not red) any comment that lacks `@claude` or
+#      whose author_association is not OWNER, MEMBER or COLLABORATOR. Anyone
+#      can comment on a public repo; a refusal there would be a red run nobody
+#      can clear.
+#   2. A collaborator-permission check requires admin/maintain/write.
+#   3. For a PR, the head branch must live in this repository and the PR must
+#      be open. Fork PRs are refused: a fork branch is untrusted code, and this
+#      job holds a write token and an Anthropic credential.
+#   4. If neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is configured
+#      the job writes a step summary and skips the agent. It does not fail red.
+#      Set exactly one of the two secrets (none exist today).
+#
+# No `pull_request_target`: with write permissions it is the classic
+# privilege-escalation shape. `issue_comment` and `pull_request_review_comment`
+# run from the default branch's copy of this file, and only for maintainers.
+#
+# The agent allowlist is a speed bump, not a sandbox. It names git subcommands
+# (a bare `git:*` would permit `git -c alias.x=!cmd x`; `git fetch`/`git push`
+# prefixes would permit `--upload-pack`/`--receive-pack`), so pushes are exact.
+# It cannot stop code the agent writes itself (Edit/Write plus a bats run
+# executes arbitrary shell). Treat everything the agent reads as possible
+# prompt injection. Mitigations: only maintainers can trigger a run,
+# `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` strips credentials from subprocess
+# environments, and branch protection still gates anything that is pushed.
+#
+# Fork rules the agent must follow live in AGENTS.md (read first) and
+# FORK-PATCHES.md. `/ai-fix` and the `ai-fix-requested` label are handled by
+# ai-fix.yml, which calls the same action.
+#
+# Checks on agent pushes: commits pushed and PRs opened with GITHUB_TOKEN do not
+# start other workflows (a GitHub rule against recursive runs), so CI will not
+# run on what the agent pushes. No PAT is used on purpose; the agent's closing
+# comment tells the maintainer to re-run checks (close and reopen the PR, or
+# push an empty commit).
+
+name: Claude
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+concurrency:
+  group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  claude:
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      actions: read
+    if: >-
+      github.event.sender.type != 'Bot' &&
+      contains(github.event.comment.body, '@claude') && (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check requester is a maintainer
+        id: maintainer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          role=$(gh api "repos/$GH_REPO/collaborators/$ACTOR/permission" \
+                   --jq '.permission' 2>/dev/null || echo none)
+          case "$role" in
+            admin|maintain|write) echo "$ACTOR has $role; proceeding" ;;
+            *) echo "::error::$ACTOR lacks write access (got '$role'); refusing."; exit 1 ;;
+          esac
+
+      - name: Resolve target and refuse fork or closed PRs
+        id: target
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NUM: ${{ github.event.issue.number || github.event.pull_request.number }}
+          IS_PR: ${{ github.event.issue.pull_request != null || github.event_name == 'pull_request_review_comment' }}
+        run: |
+          ref=""
+          proceed=true
+          if [ "$IS_PR" = "true" ]; then
+            read -r cross state head < <(gh pr view "$NUM" --repo "$GH_REPO" \
+              --json isCrossRepository,state,headRefName \
+              --jq '[.isCrossRepository, .state, .headRefName] | @tsv')
+            if [ "$cross" = "true" ]; then
+              proceed=false
+              reason="PR #$NUM comes from a fork. Only same-repository branches are handled."
+            elif [ "$state" != "OPEN" ]; then
+              proceed=false
+              reason="PR #$NUM is $state; nothing to do."
+            else
+              ref="$head"
+            fi
+          fi
+          if [ "$proceed" = "false" ]; then
+            gh issue comment "$NUM" --repo "$GH_REPO" --body "Claude did not run: $reason"
+            {
+              echo "## Claude skipped"
+              echo
+              echo "$reason"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          {
+            echo "proceed=$proceed"
+            echo "ref=$ref"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect Anthropic credential
+        id: auth
+        if: steps.target.outputs.proceed == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Claude is not configured"
+              echo
+              echo "The request passed the gates, but this repository has no"
+              echo "Anthropic credential, so the agent step was skipped."
+              echo
+              echo "To enable it, add one repository secret:"
+              echo "- \`ANTHROPIC_API_KEY\` (API billing), or"
+              echo "- \`CLAUDE_CODE_OAUTH_TOKEN\` (from \`claude setup-token\`)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.target.outputs.proceed == 'true' && steps.auth.outputs.configured == 'true'
+        with:
+          ref: ${{ steps.target.outputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Read-only helper for the agent. `gh api` is not allowlisted directly:
+      # a prefix rule would also approve `-X PUT .../merge`, and adding fields
+      # flips gh to POST. This script hardcodes the method and repository and
+      # accepts only a fixed kind plus a numeric id, so there is nothing to inject.
+      - name: Install read-only review fetcher
+        if: steps.target.outputs.proceed == 'true' && steps.auth.outputs.configured == 'true'
+        env:
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cat > "$RUNNER_TEMP/gh-review-read.sh" <<'SCRIPT'
+          #!/bin/bash
+          # usage: gh-review-read.sh <pr-comments|pr-reviews|issue-comments> <number>
+          set -euo pipefail
+          kind="${1:-}"
+          num="${2:-}"
+          [[ "$num" =~ ^[0-9]+$ ]] || { echo "number must be digits" >&2; exit 2; }
+          case "$kind" in
+            pr-comments) path="pulls/$num/comments" ;;
+            pr-reviews) path="pulls/$num/reviews" ;;
+            issue-comments) path="issues/$num/comments" ;;
+            *) echo "kind must be pr-comments, pr-reviews or issue-comments" >&2; exit 2 ;;
+          esac
+          exec gh api --method GET --paginate "repos/Danathar/akmods/$path"
+          SCRIPT
+          sed -i 's/^          //' "$RUNNER_TEMP/gh-review-read.sh"
+          chmod 0755 "$RUNNER_TEMP/gh-review-read.sh"
+
+      # anthropics/claude-code-action v1.0.248 (annotated tag dereferenced to
+      # its commit). Input names checked against that release's action.yml.
+      - name: Run Claude Code
+        if: steps.target.outputs.proceed == 'true' && steps.auth.outputs.configured == 'true'
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
+        env:
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1'
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          additional_permissions: |
+            actions: read
+          claude_args: >-
+            --max-turns 30
+            --append-system-prompt "Read AGENTS.md first and follow it. Danathar/akmods is a fork of ublue-os/akmods: ublue-os/akmods is READ-ONLY, so never open a PR, issue or comment against it and pass --repo Danathar/akmods to every gh write command. Keep changes fork-local and minimal so upstream merges stay mechanical; do not edit upstream-owned files (Justfile, build_files/, images.yaml, existing build workflows) unless the task requires it, and say so if you do. Never run just build, just test, just fetch-kernel, just push, podman, sudo or dnf: builds run only in GitHub Actions. Never touch certs/private_key*.priv or signing material, and never weaken the OpenZFS release discovery in build_files/zfs/build-kmod-zfs.sh. Before committing run the checks that apply: npx --yes bats@1.11.1 tests/unit, node --test, shellcheck on changed shell files. See FORK-PATCHES.md for the fork's load-bearing patches. PRs use --base main."
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git switch:*),Bash(git push origin HEAD),Bash(git push -u origin HEAD),Bash(gh pr create --repo Danathar/akmods:*),Bash(gh pr view --repo Danathar/akmods:*),Bash(gh pr comment --repo Danathar/akmods:*),Bash(gh issue view --repo Danathar/akmods:*),Bash(gh issue comment --repo Danathar/akmods:*),Bash(${{ runner.temp }}/gh-review-read.sh:*),Bash(npx --yes bats@1.11.1 tests/unit:*),Bash(shellcheck:*),Bash(bash -n:*),Bash(node --test:*)"
