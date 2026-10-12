@@ -86,8 +86,7 @@
           - 'docs/**'
           - '*.md'
 
-# Agent directions and the automation that runs or audits agents. `.claude/**`
-# is added once it is tracked (the globs test requires every glob to match).
+# Agent directions and the automation that runs or audits agents.
 'area/agents':
   - changed-files:
       - any-glob-to-any-file:
@@ -96,6 +95,7 @@
           - 'CONTRIBUTING.md'
           - '.github/copilot-instructions.md'
           - '.cursor/**'
+          - '.claude/**'
           - '.github/prompts/**'
           - 'policies/**'
           - '.github/workflows/claude.yml'
