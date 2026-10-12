@@ -1,0 +1,20 @@
+{
+    "$comment": "Structural checks on .github/rulesets/main.json (the committed copy of the branch ruleset; see docs/branch-protection.md). Evaluated by scripts/check-policies.mjs.",
+    "file": ".github/rulesets/main.json",
+    "requiredRuleTypes": [
+        "deletion",
+        "non_fast_forward",
+        "pull_request",
+        "required_status_checks"
+    ],
+    "requiredChecks": [
+        "Lint (shellcheck)",
+        "Lint (actionlint)",
+        "Unit tests (bats)",
+        "E2E (fedora container)",
+        "Coverage gate",
+        "Agent tooling (node --test)",
+        "policy-check"
+    ],
+    "integrationId": 15368
+}

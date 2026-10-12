@@ -1,0 +1,25 @@
+# ShellCheck configuration, read automatically by `shellcheck` and by
+# tests/lint-shellcheck.sh (the `Lint (shellcheck)` job in .github/workflows/ci.yml).
+#
+# Scope choice
+# ------------
+# This fork must stay mergeable with ublue-os/akmods, and upstream-owned shell
+# files (build_files/**, fetch-kernel.sh, ...) are never edited here. Today they
+# carry a handful of warnings/style notes (e.g. SC2044 in build-post.sh,
+# SC2034 in fetch-kernel.sh) that are upstream's to fix. So lint runs in two tiers:
+#   * fork-owned files (tests/**, scripts/**, .github/scripts/**, .claude/**):
+#     every severity, zero findings allowed;
+#   * everything else tracked: `--severity=error` only, which is green today and
+#     still catches real syntax errors that an upstream merge could introduce.
+# The tiers live in tests/lint-shellcheck.sh, not here, because .shellcheckrc
+# cannot express per-path severity.
+#
+# Run locally: tests/lint-shellcheck.sh
+
+shell=bash
+# Follow `source`d helpers (tests/unit/helpers.bash) relative to each file.
+source-path=SCRIPTDIR
+
+# bats runs each @test in its own subshell, so assigning/exporting inside a
+# test trips SC2030/SC2031 even though that is intended.
+disable=SC2030,SC2031

@@ -1,0 +1,48 @@
+{
+  "repo": "Danathar/akmods",
+  "generated_at": "2026-10-12T00:39:29.587Z",
+  "since": null,
+  "window": {
+    "first_closed": "2026-07-26T23:27:09Z",
+    "last_closed": "2026-08-11T11:59:04Z"
+  },
+  "overall": {
+    "closed": 6,
+    "merged": 6,
+    "closed_unmerged": 0,
+    "acceptance_rate": 1,
+    "time_to_merge_hours": {
+      "median": 0.19,
+      "p90": 9.08,
+      "max": 9.08
+    },
+    "reverts": 0
+  },
+  "agent": {
+    "closed": 5,
+    "merged": 5,
+    "closed_unmerged": 0,
+    "acceptance_rate": 1,
+    "time_to_merge_hours": {
+      "median": 0.18,
+      "p90": 9.08,
+      "max": 9.08
+    },
+    "reverts": 0
+  },
+  "human": {
+    "closed": 1,
+    "merged": 1,
+    "closed_unmerged": 0,
+    "acceptance_rate": 1,
+    "time_to_merge_hours": {
+      "median": 1.67,
+      "p90": 1.67,
+      "max": 1.67
+    },
+    "reverts": 0
+  },
+  "agent_share_of_closed": 0.8333,
+  "revert_rate": 0,
+  "reverts": []
+}
