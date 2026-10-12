@@ -21,5 +21,6 @@
         ".github/rulesets/**"
     ],
     "writeCommandPattern": "\\bgh\\s+(?:(?:pr|issue|release|workflow|label|repo|secret|variable|ruleset)\\s+(?:create|comment|edit|close|reopen|merge|review|delete|run|enable|disable|ready|upload|delete-asset|lock|unlock|transfer|pin|unpin|update-branch|revert|set|rename|archive)|run\\s+(?:rerun|cancel|delete)|api\\b[^\\n]*?(?:-X|--method)[ =]+[\"']?(?:POST|PUT|PATCH|DELETE))\\b",
-    "repoFlagPattern": "(?:(?:--repo|-R)[ =][\"']?(?:Danathar/akmods\\b|\\$\\{?GH_REPO\\}?|\\$\\{\\{\\s*github\\.repository\\s*\\}\\})|\\bGH_REPO=[\"']?Danathar/akmods\\b|repos/Danathar/akmods\\b)"
+    "repoFlagPattern": "(?:(?:--repo|-R)[ =][\"']?(?:Danathar/akmods\\b|\\$\\{?GH_REPO\\}?|\\$\\{\\{\\s*github\\.repository\\s*\\}\\})|\\bGH_REPO=[\"']?Danathar/akmods\\b|repos/Danathar/akmods\\b)",
+    "graphqlMutationPattern": "\\bgh\\s+api\\s+graphql\\b[^\\n]*\\bmutation\\b"
 }

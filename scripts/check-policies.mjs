@@ -263,6 +263,7 @@ export function checkRepoTarget(root, policy, upstreamGlobs, files) {
     const literal = policy.requiredLiteral;
     const repoRe = new RegExp(policy.repoFlagPattern);
     const writeRe = new RegExp(policy.writeCommandPattern, 'g');
+    const gqlRe = new RegExp(policy.graphqlMutationPattern);
 
     for (const f of files.filter((x) => matchesAny(policy.directionGlobs, x))) {
         if (!readText(root, f).includes(literal)) {
@@ -277,7 +278,10 @@ export function checkRepoTarget(root, policy, upstreamGlobs, files) {
         if (matchesAny(policy.excludeGlobs, f) || matchesAny(upstreamGlobs, f)) continue;
         for (const { line, text } of logicalLines(readText(root, f))) {
             const cmd = [...text.matchAll(writeRe)][0];
-            if (cmd && !repoRe.test(text)) {
+            if (gqlRe.test(text) && !text.includes(literal)) {
+                // GraphQL has no --repo flag; the mutation must name the repository.
+                v.push(`${f}:${line}: gh api graphql mutation without ${literal} in the command`);
+            } else if (cmd && !repoRe.test(text)) {
                 v.push(
                     `${f}:${line}: "${cmd[0]}" without ${literal} (a bare gh command targets whatever repository the clone defaults to)`,
                 );

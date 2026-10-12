@@ -176,6 +176,13 @@ test('repo-target: bare, wrong-repo and bare gh api write fail', () => {
     assert.equal(checkRepoTarget(root, policy('repo-target'), upstream, files).length, 3);
 });
 
+test('repo-target: gh api graphql mutation must name the repository', () => {
+    const bad = tree({ 'docs/a.md': "gh api graphql -f query='mutation { x }'\n" });
+    assert.equal(checkRepoTarget(bad.root, policy('repo-target'), upstream, bad.files).length, 1);
+    const ok = tree({ 'docs/a.md': "gh api graphql -F repo=Danathar/akmods -f query='mutation { x }'\n" });
+    assert.deepEqual(checkRepoTarget(ok.root, policy('repo-target'), upstream, ok.files), []);
+});
+
 test('repo-target: upstream-owned files and AGENTS.md literal', () => {
     const up = tree({ 'CHANGELOG.md': 'gh pr create\n' });
     assert.deepEqual(checkRepoTarget(up.root, policy('repo-target'), upstream, up.files), []);
