@@ -102,6 +102,24 @@ stated condition under which it should be deleted).
   `docs/branch-protection.md`). Adding a patch to this file without a `# covers:` bats test fails the
   `Coverage gate` check unless it is exempted in `.coverage-thresholds.json`.
 
+### P6 — No nvidia targets and no OGC kernel flavors
+
+- **Files:** `images.yaml` (build groups and `images:`), and through `just generate-workflows` the
+  generated `.github/workflows/build-akmods-*.yml` (`build-akmods-ogc.yml` and
+  `build-akmods-ogc-lts.yml` no longer exist).
+- **What:** the `nvidia-lts` and `nvidia-open` targets, the `ogc` and `ogc-lts` kernel flavors, the
+  `extra` target (only the OGC groups used it), and the anchors only they referenced are removed. What
+  is left: `common` on `main` / `coreos-*`, and `zfs` on `centos` / `coreos-*` / `longterm-6.18`.
+  The `build_files/nvidia/`, `fetch-kernel.sh` OGC branch and `Justfile` nvidia/OGC logic stay
+  untouched, so upstream merges of those files never conflict.
+- **Why:** nothing here uses them. `zfs-aurora-complex` builds only `main.zfs`, which it injects itself
+  (see P2). Their third-party package repos break often, and that kept upstream syncs red for reasons
+  unrelated to this fork. In the #66 sync, negativo17's F45 `nvidia-580` repo had mismatched driver and
+  kmod versions, and the Terra mirror served stale metadata for `akmod-openrazer` on `ogc-lts`.
+- **Merge note:** upstream edits to these groups, or a new nvidia target or OGC flavor, conflict here or
+  come back silently through a group upstream adds. Drop them again, then run `just generate-workflows`.
+  `tests/unit/fork_patches.bats` (P6) fails if either one comes back.
+
 ---
 
 ## Temporary
@@ -212,7 +230,7 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
 
 ### This fork's own workflows build and publish nothing
 
-As of 2026-07-30, **all six `Build * akmods` workflows and `Cleanup Old Images` are
+As of 2026-07-30, **all `Build * akmods` workflows and `Cleanup Old Images` are
 `disabled_manually`**, so nothing is built or pushed by any workflow *in this repository*.
 
 That is not the same as `ghcr.io/danathar` being empty, which this section previously claimed. The

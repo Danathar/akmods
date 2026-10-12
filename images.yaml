@@ -54,71 +54,20 @@ akmods-common: &akmods-common
   name: akmods
   description: "A caching layer for pre-built akmod RPMs"
 
-akmods-nvidia-lts: &akmods-nvidia-lts
-  name: akmods-nvidia-lts
-  description: "A caching layer for the pre-built nvidia-lts akmod RPMs"
-
-akmods-nvidia-open: &akmods-nvidia-open
-  name: akmods-nvidia-open
-  description: "A caching layer for the pre-built nvidia-open akmod RPMs"
-
 akmods-zfs: &akmods-zfs
   name: akmods-zfs
   description: "A caching layer for the pre-built zfs akmod RPMs"
 
-akmods-extra: &akmods-extra
-  name: akmods-extra
-  description: "A caching layer for pre-built extra akmod RPMs"
-
+# Fork customization (FORK-PATCHES.md P6): this fork builds no nvidia (`nvidia-lts`,
+# `nvidia-open`) targets and no `ogc` / `ogc-lts` kernel flavors (which also
+# carried the only `extra` target). Nothing consumes them here, and their
+# third-party package repos (negativo17, Terra) kept PR checks red. Upstream
+# merges re-add them in these groups and under `images:`; drop them again.
 desktop-build-group-only-x86: &desktop-build-group-only-x86
   common:
     !!merge <<:
       - *akmods-base
       - *akmods-common
-      - *arch-only-x86
-  nvidia-lts:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-lts
-      - *arch-only-x86
-  nvidia-open:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-open
-      - *arch-only-x86
-
-ogc-desktop-build-group-only-x86: &ogc-desktop-build-group-only-x86
-  common:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-common
-      - *arch-only-x86
-  extra:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-extra
-      - *arch-only-x86
-  nvidia-open:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-open
-      - *arch-only-x86
-
-ogc-lts-desktop-build-group-only-x86: &ogc-lts-desktop-build-group-only-x86
-  common:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-common
-      - *arch-only-x86
-  extra:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-extra
-      - *arch-only-x86
-  nvidia-lts:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-lts
       - *arch-only-x86
 
 desktop-build-group: &desktop-build-group
@@ -127,28 +76,8 @@ desktop-build-group: &desktop-build-group
       - *akmods-base
       - *akmods-common
       - *arch-arm-x86
-  nvidia-lts:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-lts
-      - *arch-arm-x86
-  nvidia-open:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-open
-      - *arch-arm-x86
 
 server-build-group-only-x86: &server-build-group-only-x86
-  nvidia-lts:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-lts
-      - *arch-only-x86
-  nvidia-open:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-open
-      - *arch-only-x86
   zfs:
     !!merge <<:
       - *akmods-base
@@ -156,16 +85,6 @@ server-build-group-only-x86: &server-build-group-only-x86
       - *arch-only-x86
 
 server-build-group: &server-build-group
-  nvidia-lts:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-lts
-      - *arch-arm-x86
-  nvidia-open:
-    !!merge <<:
-      - *akmods-base
-      - *akmods-nvidia-open
-      - *arch-arm-x86
   zfs:
     !!merge <<:
       - *akmods-base
@@ -186,12 +105,6 @@ images:
     main:
       !!merge <<:
         - *desktop-build-group-only-x86
-    ogc:
-      !!merge <<:
-        - *ogc-desktop-build-group-only-x86
-    ogc-lts:
-      !!merge <<:
-        - *ogc-lts-desktop-build-group-only-x86
     coreos-stable:
       !!merge <<:
         - *desktop-build-group
@@ -207,9 +120,3 @@ images:
     main:
       !!merge <<:
         - *desktop-build-group-only-x86
-    ogc:
-      !!merge <<:
-        - *ogc-desktop-build-group-only-x86
-    ogc-lts:
-      !!merge <<:
-        - *ogc-lts-desktop-build-group-only-x86

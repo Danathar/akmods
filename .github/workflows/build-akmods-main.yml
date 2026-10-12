@@ -45,46 +45,12 @@ jobs:
       kernel_cache_key: ${{ needs.cache_kernel_main_45.outputs.KCKEY }}
       kernel_flavor: main
       version: 45
-  build-main_45_nvidia-lts:
-    name: Build nvidia-lts main (45)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_main_45
-    with:
-      akmods_target: nvidia-lts
-      architecture: '["x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_main_45.outputs.KCKEY }}
-      kernel_flavor: main
-      version: 45
-  build-main_45_nvidia-open:
-    name: Build nvidia-open main (45)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_main_45
-    with:
-      akmods_target: nvidia-open
-      architecture: '["x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_main_45.outputs.KCKEY }}
-      kernel_flavor: main
-      version: 45
   check-main_45:
     name: Check main (45)
     permissions:
       actions: read
       contents: read
-    needs: [build-main_45_common,build-main_45_nvidia-lts,build-main_45_nvidia-open]
+    needs: [build-main_45_common]
     runs-on: ubuntu-26.04
     if: always()
     steps:
@@ -123,46 +89,12 @@ jobs:
       kernel_cache_key: ${{ needs.cache_kernel_main_44.outputs.KCKEY }}
       kernel_flavor: main
       version: 44
-  build-main_44_nvidia-lts:
-    name: Build nvidia-lts main (44)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_main_44
-    with:
-      akmods_target: nvidia-lts
-      architecture: '["x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_main_44.outputs.KCKEY }}
-      kernel_flavor: main
-      version: 44
-  build-main_44_nvidia-open:
-    name: Build nvidia-open main (44)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_main_44
-    with:
-      akmods_target: nvidia-open
-      architecture: '["x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_main_44.outputs.KCKEY }}
-      kernel_flavor: main
-      version: 44
   check-main_44:
     name: Check main (44)
     permissions:
       actions: read
       contents: read
-    needs: [build-main_44_common,build-main_44_nvidia-lts,build-main_44_nvidia-open]
+    needs: [build-main_44_common]
     runs-on: ubuntu-26.04
     if: always()
     steps:

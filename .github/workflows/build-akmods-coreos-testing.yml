@@ -45,40 +45,6 @@ jobs:
       kernel_cache_key: ${{ needs.cache_kernel_coreos-testing_44.outputs.KCKEY }}
       kernel_flavor: coreos-testing
       version: 44
-  build-coreos-testing_44_nvidia-lts:
-    name: Build nvidia-lts coreos-testing (44)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_coreos-testing_44
-    with:
-      akmods_target: nvidia-lts
-      architecture: '["aarch64","x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_coreos-testing_44.outputs.KCKEY }}
-      kernel_flavor: coreos-testing
-      version: 44
-  build-coreos-testing_44_nvidia-open:
-    name: Build nvidia-open coreos-testing (44)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_coreos-testing_44
-    with:
-      akmods_target: nvidia-open
-      architecture: '["aarch64","x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_coreos-testing_44.outputs.KCKEY }}
-      kernel_flavor: coreos-testing
-      version: 44
   build-coreos-testing_44_zfs:
     name: Build zfs coreos-testing (44)
     uses: ./.github/workflows/reusable-build.yml
@@ -101,7 +67,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-    needs: [build-coreos-testing_44_common,build-coreos-testing_44_nvidia-lts,build-coreos-testing_44_nvidia-open,build-coreos-testing_44_zfs]
+    needs: [build-coreos-testing_44_common,build-coreos-testing_44_zfs]
     runs-on: ubuntu-26.04
     if: always()
     steps:
