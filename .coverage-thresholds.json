@@ -6,7 +6,8 @@
         "measured": { "percent": 100 },
         "floor": { "percent": 100 },
         "exempt": {
-            "P3": "README prose; no behaviour to assert."
+            "P3": "README prose; no behaviour to assert.",
+            "P5": "New fork-local files; each part runs under its own required check (bats, node --test, policy-check, actionlint)."
         },
         "extraTags": ["GEN"]
     },

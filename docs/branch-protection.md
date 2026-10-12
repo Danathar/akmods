@@ -8,13 +8,12 @@ why, and how to apply and verify that. Every command here targets
 
 ## Status
 
-**NOT yet applied.** The ruleset in
-[`.github/rulesets/main.json`](../.github/rulesets/main.json) is committed but
-no live ruleset exists. A pull request cannot change repository settings, and
-it must not be applied before every ACMM pull request has merged: until each
-required check's workflow is on `main`, requiring it would make `main` unmergeable.
-The integrator applies it after the last ACMM PR lands (procedure below), then
-updates this section with the ruleset id and date and closes issue #45.
+**Applied.** The ruleset in
+[`.github/rulesets/main.json`](../.github/rulesets/main.json) has been live as
+ruleset `24902471` (`protect main`, `active`) since 2026-10-12, after the last
+ACMM pull request (#58) merged and all seven required checks had passed on
+`main`. The live rules matched the committed file when it was applied (the
+diff under "Verify" printed nothing).
 
 Check the live state (neither call needs admin rights):
 
@@ -23,7 +22,9 @@ gh api repos/Danathar/akmods/branches/main --jq .protected
 gh api repos/Danathar/akmods/rulesets --jq '.[] | "\(.id) \(.name) \(.enforcement)"'
 ```
 
-Before applying, the first prints `false` and the second prints nothing.
+The first prints `true`; the second lists `24902471 protect main active`.
+Anything else means the ruleset was removed or disabled and `main` again
+accepts a direct push.
 
 ## Why
 
@@ -81,27 +82,28 @@ required status check. The Hive side is a dashboard setting (ACMM evaluation,
 Merge queue row for `akmods`, **Use serialized merge lane**, or
 `POST /api/repos/merge-strategy` with
 `{"repo": "akmods", "merge_strategy": "hive-serialized"}`), not a file here.
-This repository's work for #45 is therefore the committed ruleset; the issue
-closes once the ruleset is applied and Hive reports the strategy.
+This repository's side of #45 is the applied ruleset; the Hive side has to be
+switched on by the owner in the dashboard.
 
 ## Apply
 
-A repository admin applies the file, after all ACMM PRs have merged:
+Already done (above). To re-create it after a deletion, a repository admin
+runs:
 
 ```bash
 gh api --method POST repos/Danathar/akmods/rulesets \
   --input .github/rulesets/main.json
 ```
 
-Then set the Hive merge strategy as above.
+and updates the ruleset id on this page.
 
 ## Verify
 
 Being active does not prove the rules match the file. Compare (prints nothing
-when they match; replace `<id>` with the id from the list call):
+when they match):
 
 ```bash
-diff <(gh api repos/Danathar/akmods/rulesets/<id> \
+diff <(gh api repos/Danathar/akmods/rulesets/24902471 \
          --jq '{name,target,enforcement,conditions,bypass_actors,rules}' | jq -S .) \
      <(jq -S '{name,target,enforcement,conditions,bypass_actors,rules}' \
          .github/rulesets/main.json)
@@ -116,7 +118,7 @@ the file spells them out so the diff stays empty.
 Edit the file in a pull request; after it merges, update the live ruleset:
 
 ```bash
-gh api --method PUT repos/Danathar/akmods/rulesets/<id> \
+gh api --method PUT repos/Danathar/akmods/rulesets/24902471 \
   --input .github/rulesets/main.json
 ```
 

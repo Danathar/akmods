@@ -72,6 +72,33 @@ stated condition under which it should be deleted).
   changes; uploads SARIF and writes a readable Markdown summary into the run.
 - **Merge note:** upstream has no equivalent, so this should never conflict.
 
+### P5 — Agent tooling, CI checks and governance (ACMM)
+
+- **Files:** new, fork-local: `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.editorconfig`,
+  `.shellcheckrc`, `.coverage-thresholds.json`, `risk-config.json`, `.claude/` (settings, guard hook and its
+  tests, memory, skills, session summary), `.cursor/rules/`, `.github/copilot-instructions.md`,
+  `.github/prompts/`, `.github/labeler.yml`, `.github/auto-qa-tuning.json`, `.github/rulesets/main.json`,
+  `policies/`, `scripts/` (`*.mjs` plus `scripts/tests/`), `tests/` (bats unit, container e2e, fixtures),
+  `docs/` (upstream has no `docs/`), and these workflows:
+  `ci`, `coverage-gate`, `agent-tooling`, `policy-check`, `pr-metrics`, `claude`, `ai-fix`, `labeler`,
+  `auto-qa`, `nightly-compliance`, `auto-issues`, `agent-audit` (`.github/workflows/<name>.yml`).
+  One upstream-owned edit: `.gitignore` gains `.claude/settings.local.json`.
+- **What:** the test suite, CI checks, policy-as-code and agent directions added to close the ACMM
+  issues #7–#52 (PRs #53–#58). The required checks that guard `main` (ruleset `24902471`, see
+  `docs/branch-protection.md`) come from these workflows. `tests/unit/` pins P1, P2, P4 and T1–T6, so
+  an upstream merge that silently reverts one of them now fails CI instead of reaching
+  `zfs-aurora-complex`.
+- **Why:** the repository is worked by Hive agents; these files are their directions and the gates
+  they cannot merge around.
+- **Merge note:** all but `.gitignore` are new files upstream does not have, so a merge only
+  conflicts if upstream adds a file with the same path (check `git diff --name-status upstream/main...HEAD`
+  for `A` entries that became `M`). On `.gitignore`, keep both sides. Two traps:
+  `just generate-workflows` runs `rm -f .github/workflows/build*.yml`, so never give a fork-local
+  workflow a `build` prefix; and renaming a job in `ci.yml`, `coverage-gate.yml`, `agent-tooling.yml`
+  or `policy-check.yml` blocks every merge until the ruleset is updated (procedure in
+  `docs/branch-protection.md`). Adding a patch to this file without a `# covers:` bats test fails the
+  `Coverage gate` check unless it is exempted in `.coverage-thresholds.json`.
+
 ---
 
 ## Temporary

@@ -30,8 +30,9 @@ Rules for reading the table:
   directory, `**` crosses directories.
 - `Review: owner` means the repository owner reads the change before merge.
   `ci` means green required checks are enough.
-- Paths for ACMM files that have not landed yet are listed under `pending` in
-  `risk-config.json` and are exempt from the must-match-a-file check.
+- A glob for a file that has not landed yet may be listed under `pending` in
+  `risk-config.json`, which exempts it from the must-match-a-file check. Remove
+  the entry once the file is on `main`; there are none today.
 - A path glob cannot see inside a file. A reviewer may raise a change above its
   path tier, never lower it. Raise it when, for example, a tier 3
   `build_files/*/build-kmod-*.sh` change touches signing, `dnf`/`curl`
