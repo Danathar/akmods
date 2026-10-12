@@ -95,3 +95,36 @@ run_zfs_discovery() {
     cd "${BATS_TEST_TMPDIR}/cwd" || return 1
     run bash "$@" "${snippet}"
 }
+
+# extract_justfile_secrets <recipe> — prints the SECRETS-selection block of one
+# Justfile recipe (`build` or `test`): from `SECRETS=()` up to, not including,
+# the `podman build` line. Fails if the markers moved or the block picked up a
+# just interpolation, so it can be run as plain bash.
+extract_justfile_secrets() {
+    local recipe="$1" out
+    out="$(awk -v r="${recipe}" '
+        $0 ~ "^" r ":" { inr = 1; next }
+        inr && /^[^ \t#]/ { exit }
+        inr && /^    SECRETS=\(\)$/ { f = 1 }
+        inr && f && /podman }} build/ { exit }
+        f { sub(/^    /, ""); print }
+    ' "${REPO_ROOT}/Justfile")"
+    [[ "${out}" == 'SECRETS=()'* && "${out}" == *'SECRETS+=(--secret=id=github_token,env=GH_TOKEN)'* ]] || {
+        echo "SECRETS block not found in Justfile recipe '${recipe}'" >&2
+        return 1
+    }
+    [[ "${out}" != *'{{'* ]] || {
+        echo "SECRETS block in recipe '${recipe}' contains a just interpolation" >&2
+        return 1
+    }
+    printf '%s\n' "${out}"
+}
+
+# justfile_podman_build_line <recipe> — prints the `podman build` line of one recipe.
+justfile_podman_build_line() {
+    awk -v r="$1" '
+        $0 ~ "^" r ":" { inr = 1; next }
+        inr && /^[^ \t#]/ { exit }
+        inr && /podman }} build / { print; exit }
+    ' "${REPO_ROOT}/Justfile"
+}
