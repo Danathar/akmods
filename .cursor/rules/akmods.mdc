@@ -1,0 +1,17 @@
+---
+description: Danathar/akmods fork rules; defers to AGENTS.md
+alwaysApply: true
+---
+
+# akmods fork
+
+Read `AGENTS.md` at the repo root first; it is authoritative and overrides this file.
+
+Critical rules (full text in AGENTS.md):
+
+- Fork of `ublue-os/akmods`; upstream is read-only. All `gh` writes use `-R Danathar/akmods`.
+- Never run `just build|test|fetch-kernel|push|manifest|clean`, `sudo`, package installs or local containers.
+- Never hand-edit generated `.github/workflows/build-akmods-*.yml`; edit `workflow-templates/` and run
+  `just generate-workflows`.
+- Any change adding/removing a fork delta must update `FORK-PATCHES.md`.
+- Tests: `npx --yes bats@1.11.1 tests/unit`, `node --test`, `shellcheck`, `actionlint`.
