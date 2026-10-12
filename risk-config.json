@@ -1,0 +1,111 @@
+{
+    "$comment": "docs/risk-tiers.md is the human source; this file restates its tier table as data and scripts/check-policies.mjs fails when the two disagree (tier number, name, paths, required commands, review) or when a path matches no file in the repository. Tier 1 is the MOST dangerous tier. A file takes the most dangerous tier any of its globs matches. Paths are input to a classifier, not the classifier: a reviewer may raise a tier above the path match, never lower it. Unlisted files fall to default_tier (fail-closed: high). 'pending' lists globs owned by ACMM files that may not be in the tree yet; they are exempt from the must-match-a-file check and should be removed once everything has landed.",
+    "default_tier": 2,
+    "pending": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".github/copilot-instructions.md",
+        ".cursor/rules/**",
+        ".github/prompts/**",
+        ".claude/**",
+        ".claude/settings.json",
+        ".claude/hooks/**",
+        ".github/labeler.yml",
+        ".github/auto-qa-tuning.json",
+        "tests/**",
+        ".shellcheckrc",
+        ".editorconfig",
+        ".coverage-thresholds.json"
+    ],
+    "tiers": [
+        {
+            "tier": 1,
+            "name": "critical",
+            "paths": [
+                "certs/**",
+                "cosign.pub",
+                ".github/CODEOWNERS",
+                ".github/rulesets/**",
+                "policies/**",
+                "scripts/check-policies.mjs",
+                "risk-config.json",
+                ".claude/settings.json",
+                ".claude/hooks/**"
+            ],
+            "required_commands": [
+                "node scripts/check-policies.mjs",
+                "node --test",
+                "actionlint"
+            ],
+            "review": "owner"
+        },
+        {
+            "tier": 2,
+            "name": "high",
+            "paths": [
+                ".github/workflows/**",
+                "Containerfile.in",
+                "Justfile",
+                "images.yaml",
+                "build_files/prep/**",
+                "build_files/post/**",
+                "build_files/zfs/**",
+                "FORK-PATCHES.md",
+                "AGENTS.md",
+                "CLAUDE.md",
+                ".github/copilot-instructions.md",
+                ".cursor/rules/**",
+                ".github/prompts/**",
+                ".claude/**",
+                "docs/risk-tiers.md",
+                "docs/security/**"
+            ],
+            "required_commands": [
+                "node scripts/check-policies.mjs",
+                "node --test",
+                "actionlint",
+                "shellcheck"
+            ],
+            "review": "owner"
+        },
+        {
+            "tier": 3,
+            "name": "medium",
+            "paths": [
+                "build_files/**",
+                "fetch-kernel.sh",
+                "workflow-templates/**",
+                "files/**",
+                "renovate.json",
+                "scripts/**",
+                "tests/**",
+                ".github/scripts/**",
+                ".github/labeler.yml",
+                ".github/auto-qa-tuning.json",
+                ".shellcheckrc",
+                ".coverage-thresholds.json"
+            ],
+            "required_commands": [
+                "shellcheck",
+                "node --test"
+            ],
+            "review": "ci"
+        },
+        {
+            "tier": 4,
+            "name": "low",
+            "paths": [
+                "docs/**",
+                "*.md",
+                ".editorconfig",
+                ".gitignore",
+                ".gitattributes",
+                ".devcontainer.json",
+                ".github/ISSUE_TEMPLATE/**",
+                ".github/pull_request_template.md"
+            ],
+            "required_commands": [],
+            "review": "ci"
+        }
+    ]
+}
