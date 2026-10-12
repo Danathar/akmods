@@ -1,0 +1,18 @@
+{
+    "$comment": "Tunable QA rules read by scripts/auto-qa-tuner.mjs (.github/workflows/auto-qa.yml); workflows.nightly-compliance.yml.retries is also read by .github/workflows/nightly-compliance.yml. Tuning never commits: proposals go to a tracking issue and a human applies them in a pull request.",
+    "flaky": {
+        "window_runs": 30,
+        "min_runs": 10,
+        "flaky_ratio_to_add_retry": 0.1,
+        "broken_ratio": 0.5,
+        "max_retries": 2,
+        "note": "Window: the last window_runs completed runs on main (success, failure or timed_out; cancelled and skipped runs are ignored). A commit is flaky when the same workflow both failed and succeeded on it, or a run passed only on a re-run attempt (run_attempt > 1). Rules, in order: (1) fewer than min_runs completed runs: no change. (2) failure ratio >= broken_ratio: the check is broken, not flaky; report it, change nothing (a retry would only hide it). (3) flaky commits / distinct commits >= flaky_ratio_to_add_retry: propose retries + 1, capped at max_retries. (4) no failure at all in the window and retries > 0: propose retries - 1, floored at 0. At most one step of change per run, always within [0, max_retries]. Only workflows with tunable=true have a retries value; the others are reported for visibility."
+    },
+    "workflows": {
+        "nightly-compliance.yml": { "tunable": true, "retries": 0 },
+        "ci.yml": { "tunable": false },
+        "coverage-gate.yml": { "tunable": false },
+        "policy-check.yml": { "tunable": false },
+        "agent-tooling.yml": { "tunable": false }
+    }
+}

@@ -1,0 +1,42 @@
+# Labels pull requests by the paths they change, using .github/labeler.yml
+# (actions/labeler).
+#
+# Trigger: `pull_request`, not `pull_request_target`. The labeler never checks
+# out or runs PR code, but `pull_request_target` is not needed and is the
+# privileged trigger this repo avoids: PRs from branches in this repository get
+# a write-capable GITHUB_TOKEN under `pull_request`. The tradeoff: a PR from a
+# fork gets a read-only token, so labeling it cannot write. The job is skipped
+# for fork PRs so they do not show a red check.
+#
+# Labels (`area/*`) missing from the repository are created on first use;
+# `sync-labels` removes a label when its paths are no longer touched. Issues are
+# not labeled by path. Every glob in the config must match a tracked file; see
+# scripts/tests/labeler-globs.test.mjs.
+
+name: Labeler
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    permissions:
+      contents: read
+      pull-requests: write
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+          sync-labels: true

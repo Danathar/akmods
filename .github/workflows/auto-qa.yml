@@ -1,0 +1,115 @@
+name: Auto-QA
+
+# Weekly self-tuning of how this repository's checks tolerate flakiness.
+# It reads the last runs of each workflow named in .github/auto-qa-tuning.json
+# from the Actions API (`gh api`), runs scripts/auto-qa-tuner.mjs (bounded
+# rules documented in that file's flaky.note), and reports in the step
+# summary. When a retry change is warranted it opens or updates ONE tracking
+# issue holding the proposed diff. It never pushes a commit and never changes
+# the tuning file: a human applies the diff in a pull request.
+#
+# Before tuning it also runs the Node test suite as a QA smoke check, so a
+# broken tuner or labeler config shows up here rather than silently.
+#
+# Two jobs so the privileged step stays small: `measure` runs repository code
+# with a read-only token; `report` has `issues: write`, runs no repository
+# code, and only reads the issue body the first job produced.
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: auto-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure and propose
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      propose: ${{ steps.tune.outputs.propose }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node tests (QA smoke check)
+        run: node --test
+
+      - name: Collect recent run history on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p auto-qa-out
+          echo '{}' > auto-qa-out/runs.json
+          for wf in $(jq -r '.workflows | keys[]' .github/auto-qa-tuning.json); do
+            # A workflow that does not exist yet (404) has no history.
+            if runs=$(gh api "repos/$GH_REPO/actions/workflows/$wf/runs?branch=main&status=completed&per_page=100" \
+                --jq '[.workflow_runs[] | {conclusion, head_sha, run_attempt, event}]' 2>/dev/null); then
+              :
+            else
+              runs='[]'
+            fi
+            jq --arg wf "$wf" --argjson runs "$runs" '.[$wf] = $runs' auto-qa-out/runs.json > auto-qa-out/runs.tmp
+            mv auto-qa-out/runs.tmp auto-qa-out/runs.json
+          done
+
+      - name: Propose tuning
+        id: tune
+        run: |
+          set -o pipefail
+          node scripts/auto-qa-tuner.mjs --runs auto-qa-out/runs.json --out-dir auto-qa-out | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: auto-qa-out
+          path: auto-qa-out
+          if-no-files-found: error
+
+  report:
+    name: Open or update the tracking issue
+    needs: measure
+    if: needs.measure.outputs.propose == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: auto-qa-out
+          path: auto-qa-out
+
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'Auto-QA: flaky-check tuning proposed'
+        run: |
+          set -euo pipefail
+          gh label create auto-qa --repo "$GH_REPO" --color 5319e7 \
+            --description 'Opened by the Auto-QA workflow' 2>/dev/null || true
+          # List rather than search (the search index lags and in:title is a
+          # word match). Match the exact title AND the Actions bot as author so
+          # an issue someone else opens with this title is never reused.
+          existing=$(gh issue list --repo "$GH_REPO" --state open --limit 1000 --json number,title,author \
+            --jq '[.[] | select(.title == env.TITLE and (.author.login == "app/github-actions" or .author.login == "github-actions[bot]" or .author.login == "github-actions"))][0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue edit --repo "$GH_REPO" "$existing" --body-file auto-qa-out/issue-body.md
+            gh issue comment --repo "$GH_REPO" "$existing" --body "Proposal refreshed by run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+          else
+            gh issue create --repo "$GH_REPO" --title "$TITLE" --label auto-qa --body-file auto-qa-out/issue-body.md
+          fi

@@ -1,0 +1,140 @@
+name: Auto issues
+
+# Weekly: turn real signals into at most one issue each, deduplicated by exact
+# title + the Actions bot as author, and close the issue again once the signal
+# is gone. Signals:
+#   1. Upstream sync due: ublue-os/akmods has commits that this fork's main
+#      does not contain (GitHub compare API), the oldest at least MIN_AGE_DAYS
+#      old. The issue body is refreshed on every run with the current count.
+#   2. Stale FORK-PATCHES.md "Remove when" conditions that can be evaluated
+#      mechanically:
+#        T5 (`dnf install -y jq` in build-kmod-zfs.sh): removable once `jq` is
+#            in the unconditional RPMS_TO_INSTALL of build-prep.sh, here or
+#            upstream.
+#        T6 (`git` in build-prep.sh): removable once upstream installs `git`
+#            for every kernel flavor.
+#      The other entries' conditions (P1-P3, T1, T3, T4) are human judgement
+#      calls and are not checked.
+#
+# Upstream is read-only: only GET requests are made against ublue-os/akmods,
+# and every write passes `--repo "$GH_REPO"`. No repository code is checked
+# out or run; the only tool used is `gh`. Files are read through the contents
+# API, so a pull request cannot change what this workflow inspects.
+
+on:
+  schedule:
+    - cron: '41 6 * * 3'
+  workflow_dispatch:
+
+concurrency:
+  group: auto-issues
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  signals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Evaluate signals and open, update or close issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          UPSTREAM: ublue-os/akmods
+          MIN_AGE_DAYS: '7'
+          PREP: build_files/prep/build-prep.sh
+        run: |
+          set -euo pipefail
+
+          # Exact-title lookup among open issues authored by the Actions bot.
+          find_issue() {
+            TITLE="$1" gh issue list --repo "$GH_REPO" --state open --limit 1000 --json number,title,author \
+              --jq '[.[] | select(.title == env.TITLE and (.author.login == "app/github-actions" or .author.login == "github-actions[bot]" or .author.login == "github-actions"))][0].number // empty'
+          }
+          ensure_label() {
+            gh label create "$1" --repo "$GH_REPO" --color "$2" --description "$3" 2>/dev/null || true
+          }
+          # open_or_update <title> <label> <body>: edit the body in place when
+          # the issue exists, otherwise create it.
+          open_or_update() {
+            local n
+            n=$(find_issue "$1")
+            if [ -n "$n" ]; then
+              gh issue edit "$n" --repo "$GH_REPO" --body "$3"
+              echo "updated #$n: $1"
+            else
+              gh issue create --repo "$GH_REPO" --title "$1" --label "$2" --body "$3"
+              echo "opened: $1"
+            fi
+          }
+          close_if_open() {
+            local n
+            n=$(find_issue "$1")
+            if [ -n "$n" ]; then
+              gh issue close "$n" --repo "$GH_REPO" --comment "$2"
+              echo "closed #$n: $1"
+            fi
+          }
+          # True when <pkg> is installed outside every top-level if-block of
+          # the prep script, i.e. for every kernel flavor.
+          unconditional_pkg() {
+            awk -v pkg="$1" '
+              /^if / { depth++; next }
+              /^fi/  { depth--; next }
+              depth == 0 && ($0 ~ "^[[:space:]]+" pkg "[[:space:]]*$" || ($0 ~ /RPMS_TO_INSTALL/ && $0 ~ "[ (]" pkg "[ )]")) { found = 1 }
+              END { exit found ? 0 : 1 }
+            ' "$2"
+          }
+          fetch() { # <repo> <path> <dest>
+            gh api "repos/$1/contents/$2" --jq .content | base64 -d > "$3"
+          }
+
+          ensure_label upstream-sync 0e8a16 'Fork is behind ublue-os/akmods'
+          ensure_label fork-patches fbca04 'FORK-PATCHES.md entry may be stale'
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          # --- Signal 1: upstream sync due -----------------------------------
+          title='Upstream sync due: ublue-os/akmods has unmerged commits'
+          cmp=$(gh api "repos/$GH_REPO/compare/main...ublue-os:main")
+          ahead=$(jq -r '.ahead_by' <<<"$cmp")
+          oldest=$(jq -r '.commits[0].commit.committer.date // empty' <<<"$cmp")
+          age_days=0
+          if [ -n "$oldest" ]; then
+            age_days=$(( ( $(date -u +%s) - $(date -u -d "$oldest" +%s) ) / 86400 ))
+          fi
+          if [ "$ahead" -gt 0 ] && [ "$age_days" -ge "$MIN_AGE_DAYS" ]; then
+            # shellcheck disable=SC2016 # backticks in the template are literal Markdown
+            body=$(printf '`%s` has **%s** commit(s) that `%s` main does not contain; the oldest is %s days old (%s). The fork is also %s commit(s) ahead of upstream.\n\nCompare: https://github.com/%s/compare/main...ublue-os:main\n\nSync procedure: `git fetch upstream && git merge upstream/main`, then walk `FORK-PATCHES.md` top to bottom and confirm each patch still applies (P2 is the one a silent revert would hurt most). Upstream is read-only: never open PRs or issues against it.\n\nThis issue is refreshed weekly and closes itself once the fork contains every upstream commit. Last checked: %s ([run](%s)).\n' \
+              "$UPSTREAM" "$ahead" "$GH_REPO" "$age_days" "$oldest" "$(jq -r '.behind_by' <<<"$cmp")" "$GH_REPO" "$(date -u +%Y-%m-%d)" "$run_url")
+            open_or_update "$title" upstream-sync "$body"
+          elif [ "$ahead" -eq 0 ]; then
+            close_if_open "$title" "The fork now contains every upstream commit ($run_url). Closing."
+          fi
+
+          # --- Signal 2: FORK-PATCHES 'Remove when' conditions ----------------
+          fetch "$GH_REPO" "$PREP" fork-prep.sh
+          fetch "$UPSTREAM" "$PREP" upstream-prep.sh
+
+          title='Fork patch T5 may be removable: jq is now installed unconditionally'
+          if unconditional_pkg jq fork-prep.sh || unconditional_pkg jq upstream-prep.sh; then
+            # shellcheck disable=SC2016
+            body=$(printf 'FORK-PATCHES.md T5 says: remove the `dnf install -y jq` in `build_files/zfs/build-kmod-zfs.sh` when `jq` is in the unconditional `RPMS_TO_INSTALL` of `%s`. It now is (here or in `%s`).\n\nCheck both copies, drop the `dnf install`, run a ZFS build in CI, then delete the T5 entry. Detected %s ([run](%s)).\n' \
+              "$PREP" "$UPSTREAM" "$(date -u +%Y-%m-%d)" "$run_url")
+            open_or_update "$title" fork-patches "$body"
+          else
+            close_if_open "$title" "jq is no longer installed unconditionally ($run_url). Closing."
+          fi
+
+          title='Fork patch T6 may be removable: upstream installs git for all flavors'
+          if unconditional_pkg git upstream-prep.sh; then
+            # shellcheck disable=SC2016
+            body=$(printf 'FORK-PATCHES.md T6 says: remove the fork'"'"'s unconditional `git` in `%s` when upstream installs `git` for all flavors. `%s` now does.\n\nMerge upstream, drop the fork-only `git` line, confirm a `main`-flavor ZFS build still passes `git apply`, then delete the T6 entry. Detected %s ([run](%s)).\n' \
+              "$PREP" "$UPSTREAM" "$(date -u +%Y-%m-%d)" "$run_url")
+            open_or_update "$title" fork-patches "$body"
+          else
+            close_if_open "$title" "Upstream no longer installs git for all flavors ($run_url). Closing."
+          fi

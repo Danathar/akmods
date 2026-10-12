@@ -1,0 +1,99 @@
+name: Agent audit trail
+
+# Weekly read-back of agent activity in this repository, using
+# scripts/ai-audit-report.mjs (tests: scripts/tests/ai-audit-report.test.mjs).
+#
+# Agent PRs are found by author (the Hive GitHub App), by an attribution marker
+# in the body (`— hive: agent=<name> ...`, `Co-Authored-By: Claude`, "Generated
+# with Claude Code"), by the `ai-fix-requested` label, or by a `claude/` head
+# branch. For each one the script checks: a linked issue (GitHub's resolved
+# closingIssuesReferences, not body text), an attribution marker, a merger that
+# is a human or the Hive App itself (any other bot or an unknown merger is a
+# violation), and base `main` of Danathar/akmods. Agent-made commits on main
+# are listed too. The report goes to the run summary and a workflow artifact.
+#
+# Failure model: a violation fails the run (`--strict`). It does not open an
+# issue: a red scheduled run is already visible in the Actions tab and in
+# GitHub's failure notifications, and a read-only token means a bug here cannot
+# write anything. A run that audited zero agent PRs passes but says so at the
+# top of the summary: an empty window is not evidence of compliance, and this
+# fork has no agent secrets configured today, so empty windows are expected.
+#
+# Triggers: weekly and manual. The audit reads merged PRs, so running it on
+# every push adds nothing. `GH_REPO` pins every `gh` call to this repository;
+# upstream (ublue-os/akmods) is never queried.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC; covers the previous 8 days
+  workflow_dispatch:
+    inputs:
+      since:
+        description: Audit PRs merged and commits made on or after this date (YYYY-MM-DD). Blank means the last 8 days.
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: agent-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Audit agent pull requests and commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SINCE: ${{ inputs.since }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SINCE" ]; then
+            SINCE="$(date -u -d '8 days ago' +%F)"
+          fi
+          # The script validates the date too; failing here gives a clear error
+          # before any API call.
+          case "$SINCE" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+            *) echo "::error::since must be YYYY-MM-DD, got '$SINCE'"; exit 2 ;;
+          esac
+          if [ "$(date -u -d "$SINCE" +%F 2>/dev/null || true)" != "$SINCE" ]; then
+            echo "::error::since must be a real date, got '$SINCE'"; exit 2
+          fi
+          # `commits` is left out of --json on purpose: with --limit 500 it
+          # exceeds GitHub's GraphQL node limit, and the audit does not read it.
+          gh pr list --repo "$GH_REPO" --state merged --limit 500 --search "merged:>=$SINCE" \
+            --json number,title,author,body,mergedAt,mergedBy,labels,url,baseRefName,headRefName,closingIssuesReferences > merged.json
+          gh api --paginate "repos/$GH_REPO/commits?sha=main&since=${SINCE}T00:00:00Z&per_page=100" \
+            --jq '.[] | {sha, message: .commit.message, author_login: (.author.login // ""), html_url}' | jq -s . > commits.json
+          # --limit makes the script refuse a list that may be truncated.
+          node scripts/ai-audit-report.mjs --input merged.json --commits commits.json --since "$SINCE" \
+            --limit 500 --strict --output report.md && status=0 || status=$?
+          if [ -f report.md ]; then cat report.md >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error::agent audit exited $status (1 = audit-trail violation, 2 = bad or truncated input); see the run summary"
+          fi
+          exit "$status"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: agent-audit-report
+          path: |
+            report.md
+            merged.json
+            commits.json
+          if-no-files-found: ignore
