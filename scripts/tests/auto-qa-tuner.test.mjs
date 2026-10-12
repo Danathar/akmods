@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -89,8 +89,9 @@ test('report and diff show the change', () => {
     assert.match(renderReport({ rows: [], changes: [] }, rules), /No tuning change warranted/);
 });
 
-test('CLI end to end: writes report and issue body, never touches the tuning file', () => {
+test('CLI end to end: writes report and issue body, never touches the tuning file', (t) => {
     const root = mkdtempSync(join(tmpdir(), 'akmods-tuner-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
     mkdirSync(join(root, '.github'));
     const tj = join(root, '.github/auto-qa-tuning.json');
     writeFileSync(tj, JSON.stringify(tuning(0), null, 4));

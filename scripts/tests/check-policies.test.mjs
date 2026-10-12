@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -26,6 +26,7 @@ const PEM = ['-----BEGIN', 'PRIVATE KEY-----'].join(' ');
 /** Write { relPath: content } into a fresh temp dir and return it and its file list. */
 function tree(files) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'policy-'));
+    after(() => fs.rmSync(root, { recursive: true, force: true }));
     for (const [rel, content] of Object.entries(files)) {
         fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
         fs.writeFileSync(path.join(root, rel), content);
