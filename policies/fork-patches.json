@@ -1,0 +1,42 @@
+{
+    "$comment": "Machine check for the load-bearing fork patches in FORK-PATCHES.md. An upstream merge that silently reverts one of these breaks publishing (P1 pushes to ghcr.io/ublue-os and gets a 403) or the zfs-aurora-complex consumer (P2). Each rule is a regex over one file: mustMatch must match, mustNotMatch must not.",
+    "rules": [
+        {
+            "id": "P1",
+            "file": "images.yaml",
+            "mustMatch": "^\\s+org:\\s*danathar\\s*$",
+            "mustNotMatch": "^\\s*org:\\s*ublue-os\\b",
+            "message": "images.yaml must publish under org: danathar (FORK-PATCHES.md P1)"
+        },
+        {
+            "id": "P2-env-override",
+            "file": "Justfile",
+            "mustMatch": "env\\('AKMODS_IMAGE_NAME'",
+            "message": "Justfile akmods_name must honour AKMODS_IMAGE_NAME (FORK-PATCHES.md P2)"
+        },
+        {
+            "id": "P2-images-yaml-lookup",
+            "file": "Justfile",
+            "mustMatch": "\\.name\\\" images\\.yaml",
+            "message": "Justfile akmods_name must default to the name in images.yaml (FORK-PATCHES.md P2)"
+        },
+        {
+            "id": "T3-secret-mount",
+            "file": "Containerfile.in",
+            "mustMatch": "--mount=type=secret,id=github_token",
+            "message": "Containerfile.in must mount the github_token secret for authenticated ZFS release discovery (FORK-PATCHES.md T3)"
+        },
+        {
+            "id": "T3-authenticated-discovery",
+            "file": "build_files/zfs/build-kmod-zfs.sh",
+            "mustMatch": "Authorization: Bearer",
+            "message": "build-kmod-zfs.sh must send an authenticated request when discovering OpenZFS releases (FORK-PATCHES.md T3)"
+        },
+        {
+            "id": "T6-git",
+            "file": "build_files/prep/build-prep.sh",
+            "mustMatch": "^\\s+git\\s*$",
+            "message": "build-prep.sh must install git so main-flavor ZFS builds can apply patches (FORK-PATCHES.md T6)"
+        }
+    ]
+}

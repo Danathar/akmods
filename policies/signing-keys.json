@@ -1,0 +1,23 @@
+{
+    "$comment": "Private signing keys never live in the repository. The certs/*.priv files are committed as 0-byte placeholders that the build workflows overwrite from repository secrets at build time (reusable-build.yml, reusable-cache-kernel.yml); build-prep.sh falls back to the *.priv.test keys when they are empty. See docs/security/SECURITY-AI.md.",
+    "emptyPlaceholderGlobs": [
+        "certs/*.priv"
+    ],
+    "privateKeyPattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    "privateKeyAllowedGlobs": [
+        "certs/*.priv.test"
+    ],
+    "privateKeyScanMaxBytes": 1048576,
+    "signingSecrets": {
+        "pattern": "secrets\\.(?:KERNEL_PRIVKEY|AKMOD_PRIVKEY_20230518|SIGNING_SECRET)\\b",
+        "scanGlobs": [
+            ".github/**/*.yml",
+            ".github/**/*.yaml",
+            "workflow-templates/**"
+        ],
+        "allowedFiles": [
+            ".github/workflows/reusable-build.yml",
+            ".github/workflows/reusable-cache-kernel.yml"
+        ]
+    }
+}

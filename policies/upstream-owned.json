@@ -1,0 +1,19 @@
+{
+    "$comment": "Paths that exist in ublue-os/akmods and are merged mechanically from upstream (see FORK-PATCHES.md). Fork-local hygiene rules (top-level permissions, SHA pins, gh --repo scoping) apply to everything else; upstream-owned files are only held to the rules that are safe to enforce without editing them. Evaluated by scripts/check-policies.mjs.",
+    "globs": [
+        ".github/workflows/build-akmods-*.yml",
+        ".github/workflows/cleanup.yml",
+        ".github/workflows/reusable-*.yml",
+        ".github/workflows/scorecard.yml",
+        ".github/scripts/**",
+        ".github/ISSUE_TEMPLATE/**",
+        ".github/pull_request_template.md",
+        "build_files/**",
+        "workflow-templates/**",
+        "files/**",
+        "CHANGELOG.md",
+        "CODE_OF_CONDUCT.md",
+        "README.md",
+        "LICENSE"
+    ]
+}

@@ -1,0 +1,14 @@
+{
+    "$comment": "Workflow hygiene for .github/workflows. forbiddenTriggers and write-all apply to every workflow. The remaining rules apply to fork-local workflows only (everything not in upstream-owned.json): top-level permissions present and read-only, every action pinned to a full commit SHA, no attacker-controlled event text interpolated into run scripts. Evaluated by scripts/check-policies.mjs. See docs/security/SECURITY-AI.md.",
+    "workflowGlobs": [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml"
+    ],
+    "forbiddenTriggers": [
+        "pull_request_target"
+    ],
+    "requireTopLevelPermissions": true,
+    "forbidTopLevelWrite": true,
+    "pinPattern": "^[0-9a-f]{40}$",
+    "forbiddenRunExpressions": "\\bgithub\\.event\\.(?!(?:number|action|issue\\.number|pull_request\\.(?:number|head\\.sha|base\\.sha)|repository\\.(?:name|full_name|default_branch))(?![\\w.]))|\\bgithub\\.head_ref\\b|\\bgithub\\.ref_name\\b|\\binputs\\."
+}
