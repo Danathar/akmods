@@ -83,8 +83,8 @@ Entry format:
   2026-10-12 and succeeded. `claude.yml` and `ai-fix.yml` have never run: no
   `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` secret exists, so their agent
   step is skipped.
-- **Local tooling:** `/usr/bin/just` 1.57 refuses this Justfile (`which()`
-  needs `set lists`); tests and CI use the pinned just 1.46.0 from
+- **Local tooling:** the Justfile now has `set lists` (from upstream), which
+  just < 1.57 rejects; tests and CI use the pinned just 1.58.0 from
   `tests/install-tools.sh`. Bare `node --test` skips dot-directories;
   `scripts/tests/dot-claude.test.mjs` imports the `.claude/` tests so it runs
   all of them.
