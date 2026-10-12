@@ -1,5 +1,5 @@
 {
-    "$comment": "Upstream (ublue-os/akmods) is read-only. Every gh command that writes (create, comment, edit, merge, a mutating gh api call, ...) in fork-local files must name Danathar/akmods explicitly, because a bare gh command targets whatever repository the clone defaults to. There is no exemption for prose: reword text that spells a write command without the flag. Evaluated by scripts/check-policies.mjs.",
+    "$comment": "Upstream (ublue-os/akmods) is read-only. Every gh command that writes (create, comment, edit, merge, a mutating gh api call, ...) in fork-local files must name Danathar/akmods explicitly, because a bare gh command targets whatever repository the clone defaults to. There is no exemption for prose: reword text that spells a write command without the flag. The one excluded code path is .claude/hooks/**: guard-bash.mjs enforces this same rule on every agent Bash call, and it and its tests must spell the refused commands as data. Evaluated by scripts/check-policies.mjs.",
     "requiredLiteral": "Danathar/akmods",
     "directionGlobs": [
         "AGENTS.md"
@@ -18,7 +18,8 @@
         "scripts/check-policies.mjs",
         "scripts/tests/**",
         "tests/fixtures/**",
-        ".github/rulesets/**"
+        ".github/rulesets/**",
+        ".claude/hooks/**"
     ],
     "writeCommandPattern": "\\bgh\\s+(?:(?:pr|issue|release|workflow|label|repo|secret|variable|ruleset)\\s+(?:create|comment|edit|close|reopen|merge|review|delete|run|enable|disable|ready|upload|delete-asset|lock|unlock|transfer|pin|unpin|update-branch|revert|set|rename|archive)|run\\s+(?:rerun|cancel|delete)|api\\b[^\\n]*?(?:-X|--method)[ =]+[\"']?(?:POST|PUT|PATCH|DELETE))\\b",
     "repoFlagPattern": "(?:(?:--repo|-R)[ =][\"']?(?:Danathar/akmods\\b|\\$\\{?GH_REPO\\}?|\\$\\{\\{\\s*github\\.repository\\s*\\}\\})|\\bGH_REPO=[\"']?Danathar/akmods\\b|repos/Danathar/akmods\\b)",
