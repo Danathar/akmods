@@ -13,11 +13,11 @@ on:
     paths-ignore:
       - '**.md'
   schedule:
-    - cron: '18 0 * * *'  # 0018 UTC everyday
+    - cron: '18 0 * * *'  # staggered minute past 00:00 UTC, see Justfile generate-workflows
   workflow_dispatch:
 jobs:
-  cache_kernel_ogc_43:
-    name: Cache ogc (43)
+  cache_kernel_ogc_45:
+    name: Cache ogc (45)
     uses: ./.github/workflows/reusable-cache-kernel.yml
     secrets: inherit
     permissions:
@@ -27,9 +27,9 @@ jobs:
     with:
       architecture: '["x86_64"]'
       kernel_flavor: ogc
-      version: 43
-  build-ogc_43_common:
-    name: Build common ogc (43)
+      version: 45
+  build-ogc_45_common:
+    name: Build common ogc (45)
     uses: ./.github/workflows/reusable-build.yml
     secrets: inherit
     permissions:
@@ -38,15 +38,15 @@ jobs:
       contents: read
       id-token: write
       packages: write
-    needs: cache_kernel_ogc_43
+    needs: cache_kernel_ogc_45
     with:
       akmods_target: common
       architecture: '["x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_ogc_43.outputs.KCKEY }}
+      kernel_cache_key: ${{ needs.cache_kernel_ogc_45.outputs.KCKEY }}
       kernel_flavor: ogc
-      version: 43
-  build-ogc_43_extra:
-    name: Build extra ogc (43)
+      version: 45
+  build-ogc_45_extra:
+    name: Build extra ogc (45)
     uses: ./.github/workflows/reusable-build.yml
     secrets: inherit
     permissions:
@@ -55,15 +55,15 @@ jobs:
       contents: read
       id-token: write
       packages: write
-    needs: cache_kernel_ogc_43
+    needs: cache_kernel_ogc_45
     with:
       akmods_target: extra
       architecture: '["x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_ogc_43.outputs.KCKEY }}
+      kernel_cache_key: ${{ needs.cache_kernel_ogc_45.outputs.KCKEY }}
       kernel_flavor: ogc
-      version: 43
-  build-ogc_43_nvidia-lts:
-    name: Build nvidia-lts ogc (43)
+      version: 45
+  build-ogc_45_nvidia-open:
+    name: Build nvidia-open ogc (45)
     uses: ./.github/workflows/reusable-build.yml
     secrets: inherit
     permissions:
@@ -72,37 +72,20 @@ jobs:
       contents: read
       id-token: write
       packages: write
-    needs: cache_kernel_ogc_43
-    with:
-      akmods_target: nvidia-lts
-      architecture: '["x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_ogc_43.outputs.KCKEY }}
-      kernel_flavor: ogc
-      version: 43
-  build-ogc_43_nvidia-open:
-    name: Build nvidia-open ogc (43)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_ogc_43
+    needs: cache_kernel_ogc_45
     with:
       akmods_target: nvidia-open
       architecture: '["x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_ogc_43.outputs.KCKEY }}
+      kernel_cache_key: ${{ needs.cache_kernel_ogc_45.outputs.KCKEY }}
       kernel_flavor: ogc
-      version: 43
-  check-ogc_43:
-    name: Check ogc (43)
+      version: 45
+  check-ogc_45:
+    name: Check ogc (45)
     permissions:
       actions: read
       contents: read
-    needs: [build-ogc_43_common,build-ogc_43_extra,build-ogc_43_nvidia-lts,build-ogc_43_nvidia-open]
-    runs-on: ubuntu-24.04
+    needs: [build-ogc_45_common,build-ogc_45_extra,build-ogc_45_nvidia-open]
+    runs-on: ubuntu-26.04
     if: always()
     steps:
       - name: Check for Build Failures
@@ -157,23 +140,6 @@ jobs:
       kernel_cache_key: ${{ needs.cache_kernel_ogc_44.outputs.KCKEY }}
       kernel_flavor: ogc
       version: 44
-  build-ogc_44_nvidia-lts:
-    name: Build nvidia-lts ogc (44)
-    uses: ./.github/workflows/reusable-build.yml
-    secrets: inherit
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-      packages: write
-    needs: cache_kernel_ogc_44
-    with:
-      akmods_target: nvidia-lts
-      architecture: '["x86_64"]'
-      kernel_cache_key: ${{ needs.cache_kernel_ogc_44.outputs.KCKEY }}
-      kernel_flavor: ogc
-      version: 44
   build-ogc_44_nvidia-open:
     name: Build nvidia-open ogc (44)
     uses: ./.github/workflows/reusable-build.yml
@@ -196,8 +162,8 @@ jobs:
     permissions:
       actions: read
       contents: read
-    needs: [build-ogc_44_common,build-ogc_44_extra,build-ogc_44_nvidia-lts,build-ogc_44_nvidia-open]
-    runs-on: ubuntu-24.04
+    needs: [build-ogc_44_common,build-ogc_44_extra,build-ogc_44_nvidia-open]
+    runs-on: ubuntu-26.04
     if: always()
     steps:
       - name: Check for Build Failures

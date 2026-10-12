@@ -6,25 +6,43 @@ ARCH="$(rpm -E '%_arch')"
 KERNEL="$(rpm -q "${KERNEL_NAME}" --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')"
 RELEASE="$(rpm -E '%fedora')"
 
-cp /tmp/ublue-os-akmods-addons/rpmbuild/SOURCES/_copr_ublue-os-akmods.repo /etc/yum.repos.d/
+# Skip for aarch64, Terra only ships openrazer for x86_64
+if [[ "${ARCH}" =~ aarch64 ]]; then
+    exit 0
+fi
+
+cp /tmp/ublue-os-akmods-addons/rpmbuild/SOURCES/terra.repo /etc/yum.repos.d/
+curl -LsSf -o /etc/pki/rpm-gpg/RPM-GPG-KEY-terra"${RELEASE}" \
+    "https://raw.githubusercontent.com/terrapkg/packages/f${RELEASE}/anda/terra/gpg-keys/RPM-GPG-KEY-terra${RELEASE}"
+rpmkeys --import /etc/pki/rpm-gpg/RPM-GPG-KEY-terra"${RELEASE}"
 
 ### BUILD openrazer (succeed or fail-fast with debug output)
-dnf install -y \
-    akmod-openrazer-*.fc"${RELEASE}"."${ARCH}"
-akmods --force --kernels "${KERNEL}" --kmod openrazer
-modinfo /usr/lib/modules/"${KERNEL}"/extra/openrazer/razerkbd.ko.xz >/dev/null ||
-    (find /var/cache/akmods/openrazer/ -name \*.log -print -exec cat {} \; && exit 1)
-modinfo /usr/lib/modules/"${KERNEL}"/extra/openrazer/razermouse.ko.xz >/dev/null ||
-    (find /var/cache/akmods/openrazer/ -name \*.log -print -exec cat {} \; && exit 1)
-modinfo /usr/lib/modules/"${KERNEL}"/extra/openrazer/razerkraken.ko.xz >/dev/null ||
-    (find /var/cache/akmods/openrazer/ -name \*.log -print -exec cat {} \; && exit 1)
-modinfo /usr/lib/modules/"${KERNEL}"/extra/openrazer/razeraccessory.ko.xz >/dev/null ||
-    (find /var/cache/akmods/openrazer/ -name \*.log -print -exec cat {} \; && exit 1)
+# REVERTME: Once terra has openrazer packages for F45
+if [[ "${RELEASE}" -ge 45 ]]; then
+    dnf install -y akmod-openrazer-*.fc"${RELEASE}"."${ARCH}" || {
+        echo "SKIPPED: Openrazer gets skipped if Terra doesn't have package for F45."
+        rm -f /etc/yum.repos.d/terra.repo
+        exit 0
+    }
+    akmods --force --kernels "${KERNEL}" --kmod openrazer || { rm -f /etc/yum.repos.d/terra.repo; exit 0; }
+else
+    dnf install -y \
+        akmod-openrazer-*.fc"${RELEASE}"."${ARCH}"
+    akmods --force --kernels "${KERNEL}" --kmod openrazer
+    modinfo /usr/lib/modules/"${KERNEL}"/extra/openrazer/razerkbd.ko.xz >/dev/null ||
+        (find /var/cache/akmods/openrazer/ -name \*.log -print -exec cat {} \; && exit 1)
+    modinfo /usr/lib/modules/"${KERNEL}"/extra/openrazer/razermouse.ko.xz >/dev/null ||
+        (find /var/cache/akmods/openrazer/ -name \*.log -print -exec cat {} \; && exit 1)
+    modinfo /usr/lib/modules/"${KERNEL}"/extra/openrazer/razerkraken.ko.xz >/dev/null ||
+        (find /var/cache/akmods/openrazer/ -name \*.log -print -exec cat {} \; && exit 1)
+    modinfo /usr/lib/modules/"${KERNEL}"/extra/openrazer/razeraccessory.ko.xz >/dev/null ||
+        (find /var/cache/akmods/openrazer/ -name \*.log -print -exec cat {} \; && exit 1)
+fi
 
 mkdir -p /var/cache/rpms/common
 dnf download --destdir /var/cache/rpms/common \
-    openrazer-kmod-common
+    openrazer
 
 rm -f /var/cache/rpms/common/*.src.rpm
 
-rm -f /etc/yum.repos.d/_copr_ublue-os-akmods.repo
+rm -f /etc/yum.repos.d/terra.repo

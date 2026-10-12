@@ -68,9 +68,12 @@ stated condition under which it should be deleted).
 ### P4 — OpenSSF Scorecard workflow
 
 - **Files:** `.github/workflows/scorecard.yml`, `.github/scripts/scorecard-summary.sh`
-- **What:** entirely fork-local. Runs Scorecard on push to `main`, weekly, and on branch-protection
+- **What:** upstream ships its own `scorecard.yml`; the fork adds the summary script and the steps
+  that run it (~27 added lines). Runs Scorecard on push to `main`, weekly, and on branch-protection
   changes; uploads SARIF and writes a readable Markdown summary into the run.
-- **Merge note:** upstream has no equivalent, so this should never conflict.
+- **Merge note:** upstream's edits to `scorecard.yml` are almost always Renovate digest bumps, which
+  auto-merge next to the fork's added steps. Take upstream's pins, keep the summary steps.
+  `scorecard-summary.sh` is fork-only and never conflicts.
 
 ### P5 — Agent tooling, CI checks and governance (ACMM)
 
@@ -156,6 +159,12 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
   2. disables `xtrace` around token handling so CI's `set -x` cannot echo the token into the job log;
   3. asserts the response is a JSON array before parsing, and prints the body on failure;
   4. fails loudly when no release matches `zfs-<minor>` instead of silently producing an empty version.
+
+  Upstream's #590 (merged here in the #59 sync) added its own `CURL` array with
+  `--retry 5 --retry-delay 5 --retry-all-errors` and rewrote the same lines. That collides with this
+  patch. The conflict was resolved by keeping all four changes above, adding upstream's retry flags to
+  `curl_args`, and defining upstream's `CURL` array just above the xtrace guard, because the tarball
+  and signature downloads further down use it.
 - **Why:** the anonymous GitHub API allows 60 requests/hour per IP. On shared CI runners that budget is
   routinely exhausted, and the API then returns a rate-limit *object* rather than an array. Upstream's
   `jq` then yields an empty `ZFS_VERSION` and the build fails much later with a confusing error.

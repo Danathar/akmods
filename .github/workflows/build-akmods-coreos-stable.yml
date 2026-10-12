@@ -13,7 +13,7 @@ on:
     paths-ignore:
       - '**.md'
   schedule:
-    - cron: '19 0 * * *'  # 0019 UTC everyday
+    - cron: '19 0 * * *'  # staggered minute past 00:00 UTC, see Justfile generate-workflows
   workflow_dispatch:
 jobs:
   cache_kernel_coreos-stable_43:
@@ -102,7 +102,7 @@ jobs:
       actions: read
       contents: read
     needs: [build-coreos-stable_43_common,build-coreos-stable_43_nvidia-lts,build-coreos-stable_43_nvidia-open,build-coreos-stable_43_zfs]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: always()
     steps:
       - name: Check for Build Failures
@@ -197,7 +197,7 @@ jobs:
       actions: read
       contents: read
     needs: [build-coreos-stable_44_common,build-coreos-stable_44_nvidia-lts,build-coreos-stable_44_nvidia-open,build-coreos-stable_44_zfs]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: always()
     steps:
       - name: Check for Build Failures
