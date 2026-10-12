@@ -76,8 +76,8 @@ Entry format:
   `Unit tests (bats)`, `E2E (fedora container)`, `Coverage gate`,
   `Agent tooling (node --test)`, `policy-check`; the branch must be up to date
   with `main`. See [../docs/branch-protection.md](../docs/branch-protection.md).
-  The Hive merge strategy (`hive-serialized`) is a dashboard setting the owner
-  sets; it was not set or read from this session.
+  The Hive merge strategy is `hive-serialized` (switched on by the owner on
+  2026-10-12, as the owner reported; not read from the dashboard API here).
 - **Scheduled workflows:** `nightly-compliance`, `agent-audit`, `pr-metrics`,
   `auto-qa` and `auto-issues` each ran once by `workflow_dispatch` on
   2026-10-12 and succeeded. `claude.yml` and `ai-fix.yml` have never run: no
@@ -99,10 +99,10 @@ Entry format:
 
 **Done:** slice PRs #56, #53, #54, #55, #57, #58 merged (commits in
 [../docs/agent-tasks/2026-10-11.md](../docs/agent-tasks/2026-10-11.md));
-ruleset `24902471` applied; the handoff PR adds the P5 registry entry.
+ruleset `24902471` applied; the handoff PR (#60) added the P5 registry entry;
+the owner switched Hive to the serialized merge lane, closing #45.
 **In flight:** nothing.
-**Blocked on:** #45 needs the owner to switch the Hive merge strategy to
-`hive-serialized` on the dashboard.
+**Blocked on:** nothing.
 **Watch:** #59, the first automated upstream-sync issue.
 
 ## Open threads
@@ -117,8 +117,7 @@ ruleset `24902471` applied; the handoff PR adds the P5 registry entry.
 
 ## Next steps
 
-1. Owner: set the Hive merge strategy for `akmods` to `hive-serialized` (#45),
-   then re-run the ACMM evaluation.
+1. Owner: re-run the ACMM evaluation for `akmods`.
 2. Upstream sync (#59), walking `FORK-PATCHES.md`.
 3. Before enabling any `Build *` workflow, set `KERNEL_PRIVKEY`,
    `AKMOD_PRIVKEY_20230518` and `SIGNING_SECRET`, or harden the `-s` guard in

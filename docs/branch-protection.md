@@ -82,8 +82,9 @@ required status check. The Hive side is a dashboard setting (ACMM evaluation,
 Merge queue row for `akmods`, **Use serialized merge lane**, or
 `POST /api/repos/merge-strategy` with
 `{"repo": "akmods", "merge_strategy": "hive-serialized"}`), not a file here.
-This repository's side of #45 is the applied ruleset; the Hive side has to be
-switched on by the owner in the dashboard.
+Both halves are in place: the ruleset above, and the owner switched the Hive
+merge strategy for `akmods` to `hive-serialized` on 2026-10-12 (reported by
+the owner; the dashboard API was not read from here).
 
 ## Apply
 
