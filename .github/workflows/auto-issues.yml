@@ -13,7 +13,9 @@ name: Auto issues
 #            upstream.
 #        T6 (`git` in build-prep.sh): removable once upstream installs `git`
 #            for every kernel flavor.
-#      The other entries' conditions (P1-P3, T1, T3, T4) are human judgement
+#      tests/unit/fork_patches.bats asserts the patches are still PRESENT;
+#      these signals say when they have become REMOVABLE, so they do not
+#      duplicate it. The other entries' conditions (P1-P3, T1, T3, T4) are human judgement
 #      calls and are not checked.
 #
 # Upstream is read-only: only GET requests are made against ublue-os/akmods,

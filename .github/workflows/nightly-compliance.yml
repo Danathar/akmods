@@ -2,17 +2,15 @@ name: Nightly compliance
 
 # Runs the repository's contract checks every night against main, so drift in
 # the outside world (new runner image, new shellcheck, an upstream merge that
-# silently reverted a patch) is noticed without a pull request:
-#   - bats unit tests (tests/unit, when present)
-#   - node --test (scripts/tests, .claude/hooks/tests)
-#   - shellcheck on every tracked shell file (errors only: upstream-owned
-#     scripts carry warnings this fork does not rewrite)
-#   - actionlint on every workflow
-#   - scripts/check-policies.mjs (when present)
-#   - generate-workflows drift: the build-akmods-*.yml set must match the
-#     flavors and versions in images.yaml (a full `just generate-workflows`
-#     rewrites cron minutes with $RANDOM and needs podman, so only the shape
-#     is compared)
+# silently reverted a patch) is noticed without a pull request. The jobs repeat
+# ci.yml's commands (same pinned tools) rather than calling it:
+#   - bats unit tests (tests/unit; this includes the generate-workflows drift
+#     test, tests/unit/generated_workflows.bats, and the fork-patch guards)
+#   - node --test
+#   - shellcheck via tests/lint-shellcheck.sh (two tiers)
+#   - actionlint
+#   - node scripts/check-policies.mjs
+#   - tests/e2e/run.sh in a Fedora container (no kernel download, no build)
 #
 # On a scheduled or manual run on main the `report` job keeps ONE tracking
 # issue: it opens or comments on it when any check failed, and closes it when
@@ -44,16 +42,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install bats and pinned just/yq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bats jq
+          tests/install-tools.sh "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: Run bats unit tests
         run: |
           set -euo pipefail
-          if [ ! -d tests/unit ]; then
-            echo "::notice::tests/unit not present; nothing to run"
-            exit 0
-          fi
           retries=$(jq -r '.workflows["nightly-compliance.yml"].retries // 0' .github/auto-qa-tuning.json)
           attempt=0
-          until npx --yes bats@1.11.1 --tap tests/unit; do
+          until bats --tap tests/unit; do
             attempt=$((attempt + 1))
             if [ "$attempt" -gt "$retries" ]; then exit 1; fi
             echo "::warning::bats failed; retry $attempt of $retries"
@@ -92,10 +93,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: shellcheck (errors only)
+      - name: Install pinned shellcheck
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/shellcheck.tar.xz" \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-${SHELLCHECK_VERSION}" >> "$GITHUB_PATH"
+
+      - name: shellcheck (two tiers, see .shellcheckrc)
         run: |
           shellcheck --version
-          git ls-files -z '*.sh' '*.bash' '*.bats' | xargs -0 shellcheck --severity=error
+          tests/lint-shellcheck.sh
 
   actionlint:
     name: Lint (actionlint)
@@ -136,10 +148,6 @@ jobs:
       - name: node scripts/check-policies.mjs
         run: |
           set -euo pipefail
-          if [ ! -f scripts/check-policies.mjs ]; then
-            echo "::notice::scripts/check-policies.mjs not present; nothing to run"
-            exit 0
-          fi
           retries=$(jq -r '.workflows["nightly-compliance.yml"].retries // 0' .github/auto-qa-tuning.json)
           attempt=0
           until node scripts/check-policies.mjs; do
@@ -148,52 +156,24 @@ jobs:
             echo "::warning::check-policies failed; retry $attempt of $retries"
           done
 
-  workflow-drift:
-    name: Generated workflow drift
+  e2e:
+    name: E2E (fedora container)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
+    container: registry.fedoraproject.org/fedora:latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Compare images.yaml with build-akmods-*.yml
-        run: |
-          set -euo pipefail
-          # mikefarah yq is preinstalled on ubuntu-latest; the flag matches the Justfile.
-          Y='yq --yaml-fix-merge-anchor-to-spec'
-          rc=0
-          expected=()
-          for flavor in $($Y '.images.* | keys | .[]' images.yaml | sort -u); do
-            file=".github/workflows/build-akmods-${flavor}.yml"
-            expected+=("$file")
-            if [ ! -f "$file" ]; then
-              echo "FAIL missing $file for flavor $flavor (run 'just generate-workflows')"
-              rc=1
-              continue
-            fi
-            for version in $($Y '.images | to_entries | .[] | select(.value | has("'"$flavor"'")) | .key' images.yaml); do
-              clean=${flavor//./-}
-              if ! grep -q "cache_kernel_${clean}_${version}:" "$file"; then
-                echo "FAIL $file has no cache_kernel job for $flavor $version"
-                rc=1
-              fi
-            done
-            echo "ok   $file"
-          done
-          # Generated workflows carry a fixed header; any build-akmods file
-          # that is not in the expected set is stale output of a removed flavor.
-          for f in .github/workflows/build-akmods-*.yml; do
-            if [[ ! " ${expected[*]} " == *" $f "* ]]; then
-              echo "FAIL $f matches no flavor in images.yaml (stale generated workflow)"
-              rc=1
-            fi
-          done
-          exit "$rc"
+      - name: Run end-to-end tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash tests/e2e/run.sh
 
   report:
     name: Open, update or close the tracking issue
-    needs: [unit, node, shellcheck, actionlint, policies, workflow-drift]
+    needs: [unit, node, shellcheck, actionlint, policies, e2e]
     if: ${{ always() && github.ref == 'refs/heads/main' && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -210,7 +190,7 @@ jobs:
           SHELLCHECK: ${{ needs.shellcheck.result }}
           ACTIONLINT: ${{ needs.actionlint.result }}
           POLICIES: ${{ needs.policies.result }}
-          DRIFT: ${{ needs.workflow-drift.result }}
+          E2E: ${{ needs.e2e.result }}
         run: |
           set -euo pipefail
           # List rather than search: the search index lags, and `in:title` is
@@ -220,7 +200,7 @@ jobs:
             --jq '[.[] | select(.title == env.TITLE and (.author.login == "app/github-actions" or .author.login == "github-actions[bot]" or .author.login == "github-actions"))][0].number // empty')
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           failed=""
-          for pair in "bats unit tests:$UNIT" "node --test:$NODE" "shellcheck:$SHELLCHECK" "actionlint:$ACTIONLINT" "policy check:$POLICIES" "workflow drift:$DRIFT"; do
+          for pair in "bats unit tests:$UNIT" "node --test:$NODE" "shellcheck:$SHELLCHECK" "actionlint:$ACTIONLINT" "policy check:$POLICIES" "e2e:$E2E"; do
             [ "${pair#*:}" = "success" ] || failed="$failed ${pair%%:*} (${pair#*:});"
           done
           if [ -z "$failed" ]; then

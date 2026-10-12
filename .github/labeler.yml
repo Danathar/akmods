@@ -62,7 +62,9 @@
 
 'area/tests':
   - changed-files:
-      - any-glob-to-any-file: 'scripts/tests/**'
+      - any-glob-to-any-file:
+          - 'tests/**'
+          - 'scripts/tests/**'
 
 'area/ci':
   - changed-files:
@@ -73,15 +75,29 @@
           - '.github/auto-qa-tuning.json'
           - 'scripts/**'
           - 'renovate.json'
+          - '.shellcheckrc'
+          - '.editorconfig'
+          - '.coverage-thresholds.json'
+          - 'risk-config.json'
 
 'area/docs':
   - changed-files:
-      - any-glob-to-any-file: '*.md'
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '*.md'
 
-# Agent automation entry points (workflows and scripts that run or audit agents).
+# Agent directions and the automation that runs or audits agents. `.claude/**`
+# is added once it is tracked (the globs test requires every glob to match).
 'area/agents':
   - changed-files:
       - any-glob-to-any-file:
+          - 'AGENTS.md'
+          - 'CLAUDE.md'
+          - 'CONTRIBUTING.md'
+          - '.github/copilot-instructions.md'
+          - '.cursor/**'
+          - '.github/prompts/**'
+          - 'policies/**'
           - '.github/workflows/claude.yml'
           - '.github/workflows/ai-fix.yml'
           - '.github/workflows/agent-audit.yml'
