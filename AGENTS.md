@@ -44,6 +44,13 @@ redundant, or can be dropped. Step-by-step: `.claude/skills/upstream-sync/SKILL.
 `.github/prompts/upstream-sync.prompt.md`. The consumer-side process is in `zfs-aurora-complex`
 (`docs/akmods-fork-maintenance.md`).
 
+An upstream sync PR **must land as a merge commit, never a squash**. A squash drops upstream's ancestry, so
+the next sync re-merges from a stale base (this happened with #66). The Hive picks the merge method from the
+PR: it uses a merge commit only when the title contains `sync upstream`, the PR has the `upstream-sync`
+label, or the branch starts with `upstream-sync/`. Title sync PRs `chore: sync upstream ublue-os/akmods`,
+and add the label and branch name when you can. `policy-check` fails a PR that brings in upstream
+commits without any of the three (`.github/scripts/check-upstream-sync.sh`).
+
 ## HOST SAFETY (absolute)
 
 The checkout may live on a developer's workstation. Never run, locally:

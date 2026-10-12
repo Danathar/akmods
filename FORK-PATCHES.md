@@ -81,6 +81,7 @@ stated condition under which it should be deleted).
   `.shellcheckrc`, `.coverage-thresholds.json`, `risk-config.json`, `.claude/` (settings, guard hook and its
   tests, memory, skills, session summary), `.cursor/rules/`, `.github/copilot-instructions.md`,
   `.github/prompts/`, `.github/labeler.yml`, `.github/auto-qa-tuning.json`, `.github/rulesets/main.json`,
+  `.github/scripts/check-upstream-sync.sh` (run by `policy-check`),
   `policies/`, `scripts/` (`*.mjs` plus `scripts/tests/`), `tests/` (bats unit, container e2e, fixtures),
   `docs/` (upstream has no `docs/`), and these workflows:
   `ci`, `coverage-gate`, `agent-tooling`, `policy-check`, `pr-metrics`, `claude`, `ai-fix`, `labeler`,
