@@ -50,20 +50,24 @@ stated condition under which it should be deleted).
 ### P3 — Fork README
 
 - **Files:** `README.md`
-- **What:** four changes against upstream's README:
+- **What:** six changes against upstream's README:
   1. `# ublue-os akmods` → `# akmods (Danathar fork)`, and the per-flavor build badges dropped (they
      pointed at upstream's workflow runs, which say nothing about this fork).
   2. A "Why This Fork Exists" section — what this fork feeds and which patches are load-bearing.
   3. A "Supply-chain scorecard" section documenting how to read the results produced by P4.
   4. A "This fork's workflows publish no images" callout above "How it's organized".
+  5. The Hive badge row directly under the title (CI, Coverage gate, Nightly compliance, the existing
+     Scorecard badge, Ask DeepWiki, Hive, ACMM L6, AI assisted, licence).
+  6. "Maintained with Hive (ACMM L6)" and "About this project" sections between "Supply-chain
+     scorecard" and "How it's organized", so all fork-only text stays in one block above upstream's.
 - **Deliberately *not* changed:** the `COPY --from=ghcr.io/ublue-os/...` and
   `cosign verify ... ghcr.io/ublue-os/akmods:...` examples still point at **upstream's** registry. They
   were briefly rewritten to `ghcr.io/danathar/...`, which was wrong: nothing publishes `akmods` or
   `akmods-nvidia` under that namespace (both 404 as of 2026-07-30), so those refs pointed at images
   that do not exist, and the checked-in `cosign.pub` is upstream's key.
   Do not "fix" them back to the fork's namespace unless publishing is actually turned on.
-- **Merge note:** conflicts on nearly every upstream README change. Keep the fork's framing and the
-  no-images callout; fold in upstream's substantive content.
+- **Merge note:** conflicts on nearly every upstream README change. Keep the fork's framing, the
+  badge row, the Hive and AI sections and the no-images callout; fold in upstream's substantive content.
 
 ### P4 — OpenSSF Scorecard workflow
 

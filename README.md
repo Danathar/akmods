@@ -1,6 +1,14 @@
 # akmods (Danathar fork)
 
+[![CI](https://github.com/Danathar/akmods/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Danathar/akmods/actions/workflows/ci.yml)
+[![Coverage gate](https://github.com/Danathar/akmods/actions/workflows/coverage-gate.yml/badge.svg?branch=main)](https://github.com/Danathar/akmods/actions/workflows/coverage-gate.yml)
+[![Nightly compliance](https://github.com/Danathar/akmods/actions/workflows/nightly-compliance.yml/badge.svg?branch=main)](https://github.com/Danathar/akmods/actions/workflows/nightly-compliance.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ublue-os/akmods/badge)](https://scorecard.dev/viewer/?uri=github.com/ublue-os/akmods)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-1f6feb)](https://deepwiki.com/Danathar/akmods)
+[![Maintenance assisted by Hivecommons Hive](https://img.shields.io/badge/maintenance%20assisted%20by-Hivecommons%20Hive-1f6feb)](https://github.com/hivecommons/hive)
+[![ACMM L6 Fully Autonomous](https://img.shields.io/badge/ACMM-L6%20Fully%20Autonomous-2da44e)](#maintained-with-hive-acmm-l6)
+[![AI assisted](https://img.shields.io/badge/AI-assisted-d29922)](#about-this-project)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 OCI images providing a set of cached kernel RPMs and extra kernel modules to Universal Blue images. Used for better hardware support and consistent build process.
 
@@ -24,6 +32,23 @@ OpenSSF Scorecard runs on pushes to `main`, on a weekly schedule, and when branc
 To read the latest result, open the repository's **Actions** tab, choose **Scorecard supply-chain security**, and open the latest completed run. The run summary lists findings by check, including repeated workflow-permission findings that would otherwise be buried in SARIF.
 
 The Scorecard badge above tracks the public OpenSSF result for `ublue-os/akmods`. Fork-local runs may not publish to the public Scorecard API, but their Actions summaries and code-scanning uploads still reflect the fork's current state.
+
+## Maintained with Hive (ACMM L6)
+
+Maintenance of this fork is assisted by [Hivecommons Hive](https://github.com/hivecommons/hive) at ACMM level 6 (Fully Autonomous). The fork is maintained by [@Danathar](https://github.com/Danathar). Upstream `ublue-os/akmods` is not managed by Hive.
+
+What L6 permits here:
+
+- Agents file issues and open pull requests on this fork, and agent pull requests merge once required checks pass unless they carry `hold`. A push to `main` is the source of `zfs-aurora-complex`'s next build (see [Why This Fork Exists](#why-this-fork-exists)), so those checks are the gate. [`docs/branch-protection.md`](docs/branch-protection.md) lists the required checks and [`docs/risk-tiers.md`](docs/risk-tiers.md) says which changes need a human.
+- The reviewer agent backs each finding with a file and line and never merges, approves or closes a pull request.
+- [`docs/multi-agent.md`](docs/multi-agent.md) describes how agents share the repo.
+
+Learn more: [Hive](https://github.com/hivecommons/hive) · [Hive Hub](https://hive.kubestellar.io) · [ACMM levels](https://github.com/hivecommons/hive#acmm-levels) · [full ACMM policy matrix](https://github.com/hivecommons/hive/blob/v4/src/docs/acmm-policy-matrix.md)
+
+## About this project
+
+> [!NOTE]
+> Work on this fork is done with AI assistance and should be treated cautiously. The upstream code it merges is Universal Blue's. This is a personal fork, not the official [`ublue-os/akmods`](https://github.com/ublue-os/akmods), and it publishes no images of its own (see [Why This Fork Exists](#why-this-fork-exists) and the "publish no images" callout under [How it's organized](#how-its-organized)). It comes as-is.
 
 ## How it's organized
 
