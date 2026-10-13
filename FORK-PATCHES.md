@@ -199,18 +199,23 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
 
 - **Files:** `build_files/prep/build-prep.sh` (`RPMS_TO_INSTALL`)
 - **What:** one added package.
-- **Why:** *not recorded at the time it was added.* Most likely a missing transitive dependency of the
-  ZFS `pyzfs` bindings, which `configure` will silently disable if `cffi` is absent.
-- **Remove when:** confirmed unnecessary. Do not drop it on the assumption it is dead weight — verify by
-  running a full `main` ZFS build without it first.
+- **Why:** upstream lists `python-cffi` among the ZFS build tools it installs only for its own ZFS
+  flavors, which leaves it out on `main`. See [ZFS build tools on the `main` flavor](#zfs-build-tools-on-the-main-flavor).
+  (When this was added, nobody wrote down why. The likely user is the ZFS `pyzfs` bindings, which
+  `configure` silently disables if `cffi` is absent.)
+- **Remove when:** upstream installs `python-cffi` on the `main` flavor, or a full `main` ZFS build is
+  shown to work without it. Do not drop it on the assumption it is dead weight.
 
 ### T5 — `dnf install -y jq` inside the ZFS build step
 
 - **Files:** `build_files/zfs/build-kmod-zfs.sh`
 - **What:** installs `jq` before parsing the release JSON.
-- **Why:** `jq` is not guaranteed present in the build stage, and upstream's script assumes it is.
-- **Remove when:** `jq` is added to `RPMS_TO_INSTALL` in `build_files/prep/build-prep.sh` (upstream or
-  here), which is the better place for it.
+- **Why:** upstream's script assumes `jq` is present. Upstream's `build-prep.sh` does install it, but
+  only for its own ZFS flavors, so it is missing on `main`. See
+  [ZFS build tools on the `main` flavor](#zfs-build-tools-on-the-main-flavor).
+- **Remove when:** `jq` is installed on the `main` flavor by `build_files/prep/build-prep.sh`, for example
+  in the unconditional `RPMS_TO_INSTALL` block, upstream or here. Upstream's flavor-gated `jq` entry
+  does not count: it already exists and does not reach `main`.
 
 ### T6 — `git` in the build environment
 
@@ -219,10 +224,30 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
 - **Why:** upstream's `c30f343` applies the 2.4.3 compatibility patches with `git apply`, but
   `build-prep.sh` only installs `git` when `KERNEL_FLAVOR` matches `centos|coreos|longterm`. Upstream
   never builds ZFS on the `main` flavor, so upstream never needs it there; this fork does, and the
-  build died with `git: command not found` (exit 127) on the first run after the merge. Same class of
-  gap as T5.
+  build died with `git: command not found` (exit 127) on the first run after the merge. Same root
+  cause as T4 and T5; see [ZFS build tools on the `main` flavor](#zfs-build-tools-on-the-main-flavor).
 - **Remove when:** upstream installs `git` for all flavors, stops using `git apply` (the patch block
   is guarded to ZFS 2.4.3 and disappears once 2.4.4 ships), or starts building ZFS on `main` itself.
+
+
+### ZFS build tools on the `main` flavor
+
+Not a patch: the shared root cause of T4, T5 and T6, written down so the next instance is caught at the
+upstream merge rather than in `zfs-aurora-complex`'s build.
+
+Upstream's `build_files/prep/build-prep.sh` installs the tools a ZFS build needs (`autoconf`,
+`automake`, `dkms`, `git`, `jq`, `libtool`, `ncompress`, `python-cffi`) only inside
+`if [[ "${KERNEL_FLAVOR}" =~ "centos" ]] || ... "coreos" ... "longterm"`, the flavors upstream builds ZFS
+on. This fork also builds ZFS on `main` (the target `zfs-aurora-complex` injects, see P2), which never
+enters that block. `main` gets `python-cffi` (T4), `jq` (T5) and `git` (T6) from patches. It has never
+installed the other five, and its ZFS builds succeed without them.
+
+This fork's workflows build no images, so when upstream adds a tool to that list nothing here fails;
+T6 was found as `git: command not found` in a consumer build. `tests/unit/zfs_flavor_deps.bats` now
+fails when the list changes, or when `main` starts entering the block. When it fails during an
+upstream merge, decide for each new package whether `main` needs it. If it does, add a T patch. Then
+update the test's reviewed list and the list above. If upstream starts installing these tools on
+`main`, T4 to T6 can go.
 
 ---
 
