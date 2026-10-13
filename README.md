@@ -76,7 +76,6 @@ Builds also run for different kernels:
 - `main` - Mainline Fedora Kernel
 - `coreos-stable` - Current Fedora CoreOS stable kernel version
 - `coreos-testing` - Current Fedora CoreOS testing kernel version
-- `Centos` - Mainline Centos Kernel
 - `Longterm-6.18` - Fedora Kernel on Kernel 6.18 LTS
 - `ogc` - [Open Gaming Collective](https://github.com/OpenGamingCollective/kernel-packages-fedora) kernel
 - `ogc-lts` - Open Gaming Collective kernel, LTS branch (`:lts` tag)
@@ -269,10 +268,10 @@ Since nothing additional was set. The following will occur. The build scripts wi
 - AKMODS_TARGET - The akmods package to build
 
 ```bash
-AKMODS_KERNEL=centos AKMODS_VERSION=10 AKMODS_TARGET=zfs just build
+AKMODS_KERNEL=longterm-6.18 AKMODS_VERSION=44 AKMODS_TARGET=zfs just build
 ```
 
-Will determine the current centos kernel version, download the rpms and sign them, and will then build the zfs package.
+Will determine the current longterm kernel version, download the rpms and sign them, and will then build the zfs package.
 
 You can also populate a `.env` file to store your current settings.
 
