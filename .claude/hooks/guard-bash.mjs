@@ -288,21 +288,8 @@ export function tokenize(input) {
                 seg.heredocBody = (seg.heredocBody ?? '') + input.slice(bodyStart, bodyEnd);
             }
         } else if (c === '<' && input[i + 1] === '<' && input[i + 2] !== '<') {
-            i += 2;
-            if (input[i] === '-') i++;
-            while (input[i] === ' ' || input[i] === '\t') i++;
-            let delim = '';
-            let quote = null;
-            while (i < input.length) {
-                const d = input[i];
-                if (quote) {
-                    if (d === quote) quote = null;
-                    else delim += d;
-                } else if (d === "'" || d === '"') quote = d;
-                else if (/[\s;&|()<>]/.test(d)) break;
-                else delim += d;
-                i++;
-            }
+            const { delim, next } = readHeredocStart(input, i);
+            i = next;
             endWord();
             if (delim) pendingHeredocs.push({ delim, seg: words });
         } else if ((c === '<' || c === '>') && input[i + 1] === '(') {
@@ -985,8 +972,10 @@ function checkContainerEnter(cmd, args, state) {
     if (cmd !== 'distrobox-host-exec') return null; // other distrobox/toolbox subcommands (create, list, ephemeral, ...) run nothing of ours
     const at = args.findIndex((a) => !a.startsWith('-'));
     const inner = at === -1 ? [] : args.slice(at);
-    if (inner.length) return checkSegment(inner, state);
-    return null;
+    if (!inner.length) {
+        return block('Blocked: `distrobox-host-exec` with no command starts a shell on the host, which runs whatever reaches its stdin; name the command to run.');
+    }
+    return checkSegment(inner, state);
 }
 
 function firstWord(args, valueFlags) {

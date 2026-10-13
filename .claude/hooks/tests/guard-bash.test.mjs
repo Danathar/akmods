@@ -105,6 +105,8 @@ const allowed = [
     'tee build/out.txt',
     'cp cosign.pub /tmp/cosign.pub',
     'openssl x509 -in certs/public_key.der.test -inform DER -noout -text',
+    // a backslash-quoted heredoc delimiter keeps the body literal
+    'cat <<\\EOF\n$(sudo ls)\nEOF',
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -286,6 +288,14 @@ const blocked = [
     ['openssl genrsa -out /tmp/x.key 4096', 'signing material'],
     ['bash -c "echo x > certs/private_key.priv"', 'signing material'],
     ['truncate -s 0 certs/private_key.priv', 'signing material'],
+    // a backslash-quoted heredoc delimiter ends the body like a quoted one
+    ['cat <<\\EOF\nx\nEOF\nsudo ls', 'privilege escalation'],
+    ['cat <<E\\OF\nx\nEOF\nsudo ls', 'privilege escalation'],
+    ['cat <<-\\EOF\n\tx\n\tEOF\nsudo ls', 'privilege escalation'],
+    // with no command, distrobox-host-exec runs the host shell on its stdin
+    ['distrobox-host-exec', 'no command'],
+    ["echo 'sudo ls' | distrobox-host-exec", 'no command'],
+    ['distrobox-host-exec <<EOF\nsudo ls\nEOF', 'no command'],
 ];
 
 for (const command of allowed) {
