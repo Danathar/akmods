@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Upstream's build_files/prep/build-prep.sh installs the ZFS build tools only
-# inside a KERNEL_FLAVOR check (centos, coreos, longterm). This fork also builds
+# inside a KERNEL_FLAVOR check (coreos, longterm). This fork also builds
 # ZFS on `main` (the target zfs-aurora-complex injects, see P2), which never
 # enters that block, so the tools the main-flavor build needs are carried by
 # their own patches (T4, T5, T6). Nothing else notices when upstream changes the
@@ -29,14 +29,14 @@ EOF
 
 # Prints the flavor-gated `if` line of build-prep.sh.
 flavor_gate_line() {
-    grep -m1 -E '^if .*KERNEL_FLAVOR.*centos.*coreos.*longterm.*; then$' \
+    grep -m1 -E '^if .*KERNEL_FLAVOR.*coreos.*longterm.*; then$' \
         "${REPO_ROOT}/build_files/prep/build-prep.sh"
 }
 
 # Prints the packages the flavor-gated block appends to RPMS_TO_INSTALL, one per line.
 flavor_gated_packages() {
     awk '
-        /^if .*KERNEL_FLAVOR.*centos.*coreos.*longterm.*; then$/ { inblock = 1; next }
+        /^if .*KERNEL_FLAVOR.*coreos.*longterm.*; then$/ { inblock = 1; next }
         inblock && /^fi$/ { exit }
         inblock && /RPMS_TO_INSTALL\+=\($/ { inlist = 1; next }
         inlist && /^[[:space:]]*\)$/ { inlist = 0; next }
@@ -56,7 +56,7 @@ flavor_gated_packages() {
     found="$(printf '%s\n' "${output}" | sort)"
     reviewed="$(reviewed_main_flavor_sources | awk '{print $1}' | sort)"
     [ "${found}" = "${reviewed}" ] || {
-        echo "Upstream changed the ZFS build tools it installs only for centos/coreos/longterm." >&2
+        echo "Upstream changed the ZFS build tools it installs only for coreos/longterm." >&2
         echo "The main-flavor ZFS build (zfs-aurora-complex) does not get them. Decide per package" >&2
         echo "whether main needs it (add a T patch) or not, then update this test and FORK-PATCHES.md." >&2
         diff <(printf '%s\n' "${reviewed}") <(printf '%s\n' "${found}") >&2 || true

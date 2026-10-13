@@ -114,7 +114,7 @@ stated condition under which it should be deleted).
   `build-akmods-ogc-lts.yml` no longer exist).
 - **What:** the `nvidia-lts` and `nvidia-open` targets, the `ogc` and `ogc-lts` kernel flavors, the
   `extra` target (only the OGC groups used it), and the anchors only they referenced are removed. What
-  is left: `common` on `main` / `coreos-*`, and `zfs` on `centos` / `coreos-*` / `longterm-6.18`.
+  is left: `common` on `main` / `coreos-*`, and `zfs` on `coreos-*` / `longterm-6.18`.
   The `build_files/nvidia/`, `fetch-kernel.sh` OGC branch and `Justfile` nvidia/OGC logic stay
   untouched, so upstream merges of those files never conflict.
 - **Why:** nothing here uses them. `zfs-aurora-complex` builds only `main.zfs`, which it injects itself
@@ -222,7 +222,7 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
 - **Files:** `build_files/prep/build-prep.sh` (`RPMS_TO_INSTALL`)
 - **What:** one added package, in the unconditional list.
 - **Why:** upstream's `c30f343` applies the 2.4.3 compatibility patches with `git apply`, but
-  `build-prep.sh` only installs `git` when `KERNEL_FLAVOR` matches `centos|coreos|longterm`. Upstream
+  `build-prep.sh` only installs `git` when `KERNEL_FLAVOR` matches `coreos|longterm`. Upstream
   never builds ZFS on the `main` flavor, so upstream never needs it there; this fork does, and the
   build died with `git: command not found` (exit 127) on the first run after the merge. Same root
   cause as T4 and T5; see [ZFS build tools on the `main` flavor](#zfs-build-tools-on-the-main-flavor).
@@ -237,7 +237,7 @@ upstream merge rather than in `zfs-aurora-complex`'s build.
 
 Upstream's `build_files/prep/build-prep.sh` installs the tools a ZFS build needs (`autoconf`,
 `automake`, `dkms`, `git`, `jq`, `libtool`, `ncompress`, `python-cffi`) only inside
-`if [[ "${KERNEL_FLAVOR}" =~ "centos" ]] || ... "coreos" ... "longterm"`, the flavors upstream builds ZFS
+`if [[ "${KERNEL_FLAVOR}" =~ "coreos" ]] || [[ "${KERNEL_FLAVOR}" =~ "longterm" ]]`, the flavors upstream builds ZFS
 on. This fork also builds ZFS on `main` (the target `zfs-aurora-complex` injects, see P2), which never
 enters that block. `main` gets `python-cffi` (T4), `jq` (T5) and `git` (T6) from patches. It has never
 installed the other five, and its ZFS builds succeed without them.
