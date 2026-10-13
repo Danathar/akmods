@@ -59,7 +59,11 @@
 //       `--show`, `--summary`, `--dump`, `--fmt --check`, bare `just`). Naming
 //       any recipe without a read flag is refused: build, test, fetch-kernel,
 //       push, manifest, clean, generate-workflows, ... `--edit`, `--command`,
-//       `--shell*`, `--init`, `--choose` are refused.
+//       `--shell*`, `--init`, `--choose` are refused. Variable overrides
+//       (`--set NAME VALUE`, `--set=...`, `NAME=VALUE` before or after `--`)
+//       are refused too: the Justfile builds `shell()` commands from its
+//       variables while evaluating, so overriding one (e.g. `yq`) runs any
+//       program even under `--evaluate`/`--dry-run`.
 //   H2  Executing fetch-kernel.sh, build_files/**/*.sh or tests/e2e/**/*.sh:
 //       directly, via a shell, source, `.`, wrappers, systemd-run, stdin.
 //       shellcheck, `bash -n`, cat, grep, bats are fine.
@@ -1061,10 +1065,11 @@ function checkJust(args) {
     let fmt = false;
     let check = false;
     const recipes = [];
+    const overrides = [];
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
         if (a === '--') {
-            recipes.push(...args.slice(i + 1).filter((x) => !isAssignment(x)));
+            for (const x of args.slice(i + 1)) (isAssignment(x) ? overrides : recipes).push(x);
             break;
         }
         if (a.startsWith('--')) {
@@ -1075,7 +1080,10 @@ function checkJust(args) {
             if (name === '--fmt') fmt = true;
             else if (name === '--check') check = true;
             else if (JUST_READ_LONG.has(name)) read = true;
-            else if (name === '--set') i += 2;
+            else if (name === '--set') {
+                overrides.push(a);
+                i += a.includes('=') ? 1 : 2;
+            }
             else if (JUST_VALUE_LONG.has(name) && !a.includes('=')) i++;
             continue;
         }
@@ -1093,12 +1101,20 @@ function checkJust(args) {
             }
             continue;
         }
-        if (!isAssignment(a)) recipes.push(a);
+        (isAssignment(a) ? overrides : recipes).push(a);
     }
     if (fmt && !check && !read) {
         return block('Blocked: `just --fmt` rewrites the Justfile; use `just --fmt --check` or `just --dump`.');
     }
-    if (read || fmt || recipes.length === 0) return null; // bare `just` runs `just --list`
+    if (read || fmt || recipes.length === 0) {
+        if (overrides.length === 0) return null; // bare `just` runs `just --list`
+        return block(
+            `Blocked: \`just\` variable override (${overrides[0]}) is refused. The Justfile builds shell() commands from its ` +
+                'variables while evaluating, so an override can run any program even under --evaluate/--dry-run. ' +
+                'Select an image with the AKMODS_KERNEL / AKMODS_VERSION / AKMODS_TARGET environment variables instead, ' +
+                'e.g. `AKMODS_KERNEL=main just --evaluate version`.'
+        );
+    }
     const named = recipes.filter((r) => JUST_NAMED_RECIPES.includes(r));
     return block(
         `Blocked: \`just ${recipes.join(' ')}\` would run ${named.length ? `the host-heavy recipe(s) ${named.join(', ')}` : 'a recipe'} ` +
