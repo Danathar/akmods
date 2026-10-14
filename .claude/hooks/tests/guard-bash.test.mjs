@@ -115,6 +115,12 @@ const allowed = [
     "yq -P -e '.defaults.version' images.yaml",
     'npx --yes bats@1.11.1 tests/unit --formatter tap',
     'npx --yes bats@1.11.1 tests/unit -F junit',
+    // every built-in formatter, in each spelling bats takes
+    'npx --yes bats@1.11.1 tests/unit -F pretty',
+    'npx --yes bats@1.11.1 tests/unit -Fjunit',
+    'npx --yes bats@1.11.1 tests/unit --formatter=tap13',
+    // -p takes a value, so the s in json is not --split-exp
+    "yq -pjson '.' build/cache.json",
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -319,6 +325,19 @@ const blocked = [
     ['npx --yes bats@1.11.1 tests/unit -F /tmp/x.sh', 'is a program bats runs'],
     ['npx --yes bats@1.11.1 tests/unit --report-formatter=/tmp/x.sh -o build', 'is a program bats runs'],
     ['npx --yes bats@1.11.1 tests/unit -j 2 --parallel-binary-name /tmp/x.sh', '--parallel-binary-name'],
+    ['npx --yes bats@1.11.1 tests/unit --parallel-binary-name=/tmp/x.sh', '--parallel-binary-name'],
+    ['npx --yes bats@1.11.1 tests/unit --formatter=/tmp/x.sh', 'is a program bats runs'],
+    ['npx --yes bats@1.11.1 tests/unit --formatter /tmp/x.sh', 'is a program bats runs'],
+    ['npx --yes bats@1.11.1 tests/unit -F/tmp/x.sh', 'is a program bats runs'],
+    // the option right after the bats package name, and bats run directly
+    ['npx --yes bats@1.11.1 -F /tmp/x.sh tests/unit', 'is a program bats runs'],
+    ['bats -F /tmp/x.sh tests/unit', 'is a program bats runs'],
+    ['yq --split-exp-file=split.yq images.yaml', 'yq --split-exp-file'],
+    // systemd-run and flatpak-spawn run the linter outside this shell; look through to it
+    ['flatpak-spawn --host actionlint -shellcheck=/tmp/x.sh', 'actionlint -shellcheck'],
+    ["systemd-run --user yq -i '.defaults.version = \"99\"' images.yaml", 'yq -i'],
+    ['flatpak-spawn --host bats -F /tmp/x.sh tests/unit', 'is a program bats runs'],
+    ['systemd-run --user npx --yes bats@1.11.1 tests/unit -F /tmp/x.sh', 'is a program bats runs'],
 ];
 
 for (const command of allowed) {
