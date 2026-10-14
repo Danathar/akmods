@@ -1,6 +1,6 @@
 // Tests for .claude/hooks/guard-bash.mjs. Each case spawns the hook exactly as
 // Claude Code does: JSON on stdin, decision from the exit code (0 allow, 2
-// block) and stderr. One block case per rule (G1-G5, T1-T5, N1, H1-H6, K1 in
+// block) and stderr. One block case per rule (G1-G5, T1-T5, N1, H1-H6, L1, K1 in
 // the hook's header), each next to the allowed counterpart that must keep
 // working.
 import { test } from 'node:test';
@@ -107,6 +107,14 @@ const allowed = [
     'openssl x509 -in certs/public_key.der.test -inform DER -noout -text',
     // a backslash-quoted heredoc delimiter keeps the body literal
     'cat <<\\EOF\n$(sudo ls)\nEOF',
+    // L1: reading and linting options stay pre-approved
+    'actionlint -shellcheck= .github/workflows/ci.yml',
+    'actionlint -color -oneline',
+    "yq -o json '.defaults' images.yaml",
+    "yq -oi '.defaults' images.yaml",
+    "yq -P -e '.defaults.version' images.yaml",
+    'npx --yes bats@1.11.1 tests/unit --formatter tap',
+    'npx --yes bats@1.11.1 tests/unit -F junit',
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -296,6 +304,21 @@ const blocked = [
     ['distrobox-host-exec', 'no command'],
     ["echo 'sudo ls' | distrobox-host-exec", 'no command'],
     ['distrobox-host-exec <<EOF\nsudo ls\nEOF', 'no command'],
+    // --- L1: pre-approved linters and test runners that run a program or write files ---
+    ['actionlint -shellcheck=./fetch-kernel.sh', 'actionlint -shellcheck'],
+    ['actionlint -shellcheck /usr/bin/sudo', 'actionlint -shellcheck'],
+    ["actionlint -pyflakes=python3 - <<'YML'\non: push\nYML", 'actionlint -pyflakes'],
+    ['actionlint --pyflakes python3 x.yml', 'actionlint -pyflakes'],
+    ['timeout 60 actionlint -shellcheck=/tmp/x.sh', 'actionlint -shellcheck'],
+    ["yq -i '.defaults.version = \"99\"' images.yaml", 'yq -i'],
+    ["yq -Pi '.x = 1' .github/workflows/ci.yml", 'yq -i'],
+    ["yq --inplace -o json '.permissions.deny = []' .claude/settings.json", 'yq --inplace'],
+    ["yq -s '\"certs/private_key.priv\"' images.yaml", 'yq -s'],
+    ["yq --split-exp=.name images.yaml", 'yq --split-exp'],
+    ["yq --security-enable-system-operator -n 'system(\"id\")'", 'yq --security-enable-system-operator'],
+    ['npx --yes bats@1.11.1 tests/unit -F /tmp/x.sh', 'is a program bats runs'],
+    ['npx --yes bats@1.11.1 tests/unit --report-formatter=/tmp/x.sh -o build', 'is a program bats runs'],
+    ['npx --yes bats@1.11.1 tests/unit -j 2 --parallel-binary-name /tmp/x.sh', '--parallel-binary-name'],
 ];
 
 for (const command of allowed) {

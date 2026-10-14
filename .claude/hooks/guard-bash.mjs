@@ -77,6 +77,13 @@
 //       pull, login, exec, system prune and the rest are refused.
 //   H6  cosign other than verification (sign, attest, generate-key-pair,
 //       login, ...); skopeo other than inspect/list-tags.
+//   Pre-approved linters and test runners
+//   L1  Options that make them run a program they are handed or write files:
+//       actionlint -shellcheck/-pyflakes with a value (an empty value, which
+//       turns the integration off, is fine); yq -i/--inplace, -s/--split-exp,
+//       --split-exp-file and --security-enable-system-operator; bats (also
+//       through npx) -F/--formatter or --report-formatter naming anything but
+//       a built-in formatter, and --parallel-binary-name.
 //   Signing material
 //   K1  Writes (redirect, tee, cp, mv, install, ln, truncate, dd of=,
 //       openssl -out/-keyout) to certs/ files other than *.test, or to any
@@ -929,7 +936,7 @@ const CONTAINER_ENGINES = new Set(['podman', 'docker', 'nerdctl']);
 // Words a wrapper (env, timeout, xargs, ...) can hide; we look through the wrapper to them.
 const LOOKTHROUGH = new Set([
     'gh', 'git', 'node', 'nodejs', ...SHELLS, 'eval', 'source', 'rpm', 'rpm-ostree', 'bootc', 'pkcon', 'just', 'cosign',
-    'skopeo', 'tee', 'cp', 'mv', 'install', 'ln', 'dd', 'openssl', 'truncate',
+    'skopeo', 'tee', 'cp', 'mv', 'install', 'ln', 'dd', 'openssl', 'truncate', 'actionlint', 'yq', 'bats', 'npx',
     ...PRIVILEGE, 'flatpak-spawn', ...DNF, ...CONTAINER_ENTER, ...CONTAINER_ENGINES,
 ]);
 
@@ -1158,6 +1165,95 @@ function checkSkopeo(args) {
     const { sub } = firstWord(args, ['--policy', '--registries.d', '--override-arch', '--override-os', '--override-variant', '--command-timeout', '--tmpdir']);
     if (sub === undefined || ['inspect', 'list-tags', 'help'].includes(sub)) return null;
     return block(`Blocked: \`skopeo ${sub}\` writes to or authenticates against a registry; only inspect and list-tags are allowed.`);
+}
+
+// ---------------------------------------------------------------------------
+// Pre-approved linters and test runners (L1)
+// ---------------------------------------------------------------------------
+// settings.json allows `actionlint`, `yq` and `npx --yes bats@1.11.1 tests/unit`
+// with any trailing arguments. Each has options that turn it into a launcher or
+// a file writer: actionlint runs whatever -shellcheck/-pyflakes name (and pipes
+// `run:` scripts to it), yq -i rewrites images.yaml, workflows or
+// .claude/settings.json past their `ask` rules, and bats runs a formatter given
+// by path.
+
+/** Value of a Go-style flag (`-name v`, `-name=v`, `--name=v`) at args[i], or undefined if args[i] is not that flag. */
+function goFlagValue(args, i, name) {
+    const m = /^--?([^=]+)(?:=(.*))?$/s.exec(args[i]);
+    if (!m || m[1] !== name) return undefined;
+    return m[2] !== undefined ? m[2] : (args[i + 1] ?? '');
+}
+
+/** actionlint: -shellcheck/-pyflakes name the executable it runs. An empty value disables the integration. */
+function checkActionlint(args) {
+    for (let i = 0; i < args.length; i++) {
+        for (const name of ['shellcheck', 'pyflakes']) {
+            const value = goFlagValue(args, i, name);
+            if (value === undefined || value === '') continue;
+            return block(
+                `Blocked: \`actionlint -${name} ${value}\` makes actionlint run "${value}" and feed it the workflows' ` +
+                    '`run:` scripts. Run plain `actionlint` (it finds shellcheck on PATH), or pass ' +
+                    `\`-${name}=\` to switch the integration off.`
+            );
+        }
+    }
+    return null;
+}
+
+// yq short options that take a value: the rest of a cluster (`-oyaml`) is that value.
+const YQ_VALUE_SHORT = new Set(['p', 'o', 'I', 'f']);
+const YQ_REFUSED_LONG = new Set(['--inplace', '--split-exp', '--split-exp-file', '--security-enable-system-operator']);
+
+/** yq: reads only; in-place edits, split-file output and the system operator are refused. */
+function checkYq(args) {
+    const refuse = (what) =>
+        block(
+            `Blocked: \`yq ${what}\` writes files or runs commands. Pre-approved yq is for reading; make edits with ` +
+                'the Edit tool so the ask rules for images.yaml, workflows and .claude/ still apply.'
+        );
+    for (const a of args) {
+        if (a.startsWith('--')) {
+            const name = a.split('=')[0];
+            if (YQ_REFUSED_LONG.has(name)) return refuse(name);
+            continue;
+        }
+        if (!/^-[a-zA-Z0-9]/.test(a)) continue;
+        for (let k = 1; k < a.length; k++) {
+            const ch = a[k];
+            if (ch === 'i' || ch === 's') return refuse(`-${ch}`);
+            if (YQ_VALUE_SHORT.has(ch)) break;
+        }
+    }
+    return null;
+}
+
+const BATS_FORMATTERS = new Set(['pretty', 'tap', 'tap13', 'junit']);
+
+/** bats: a formatter given by path, or a parallel binary, is a program bats runs. */
+function checkBats(args) {
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        let value;
+        const m = /^(--formatter|--report-formatter)(?:=(.*))?$/s.exec(a);
+        if (m) value = m[2] !== undefined ? m[2] : (args[i + 1] ?? '');
+        else if (a === '-F') value = args[i + 1] ?? '';
+        else if (/^-F./.test(a)) value = a.slice(2);
+        else if (a === '--parallel-binary-name' || a.startsWith('--parallel-binary-name=')) {
+            return block('Blocked: `bats --parallel-binary-name` names a program bats runs.');
+        }
+        if (value === undefined || BATS_FORMATTERS.has(value)) continue;
+        return block(
+            `Blocked: \`bats\` formatter "${value}" is a program bats runs. Use a built-in formatter ` +
+                `(${[...BATS_FORMATTERS].join(', ')}).`
+        );
+    }
+    return null;
+}
+
+/** npx: check the bats command line when npx runs bats. */
+function checkNpx(args) {
+    const at = args.findIndex((a) => /^bats(@[^/\s]*)?$/.test(a));
+    return at === -1 ? null : checkBats(args.slice(at + 1));
 }
 
 // ---------------------------------------------------------------------------
@@ -1432,6 +1528,10 @@ function checkSegment(words, state) {
     if (CONTAINER_ENGINES.has(cmd)) return checkContainerEngine(cmd, args);
     if (cmd === 'cosign') return checkCosign(args);
     if (cmd === 'skopeo') return checkSkopeo(args);
+    if (cmd === 'actionlint') return checkActionlint(args);
+    if (cmd === 'yq') return checkYq(args);
+    if (cmd === 'bats') return checkBats(args);
+    if (cmd === 'npx') return checkNpx(args);
     return null;
 }
 
