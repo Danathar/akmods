@@ -48,6 +48,9 @@
 //   T3  git options that write a file, read outside the repository or run a
 //       program on the pre-approved read commands (--output, --no-index,
 //       --ext-diff, git grep -O, --exec-path, `-c diff.external=` ...);
+//       --upload-pack (and its abbreviations such as --upl), --exec and
+//       clone/ls-remote -u on git fetch|pull|clone|ls-remote|archive, which
+//       run the named program; `-c protocol.*` (protocol.ext.allow=always);
 //       GIT_* / PAGER / EDITOR variables other than identity and no-op pagers.
 //   T4  git, node or a shell run through xargs (run-time arguments).
 //   T5  `bash -n` with a word starting with + or one bash could expand into one.
@@ -661,7 +664,7 @@ const RISKY_GIT_CONFIG = /^(remote\.|url\.|credential\.|core\.sshcommand$)/i;
 // `-c` keys that make git run a program or read config from elsewhere
 // (`git -c diff.external=prog diff`, `-c core.pager=...`, `-c alias.x=!cmd`).
 const EXEC_GIT_CONFIG =
-    /^(core\.(pager|editor|fsmonitor|hookspath|askpass|gitproxy|attributesfile)$|diff\.|pager\.|alias\.|sequence\.editor$|gpg\.|filter\.|merge\.|interactive\.|include\.|includeif\.|uploadpack\.)/i;
+    /^(core\.(pager|editor|fsmonitor|hookspath|askpass|gitproxy|attributesfile)$|diff\.|pager\.|alias\.|sequence\.editor$|gpg\.|filter\.|merge\.|interactive\.|include\.|includeif\.|uploadpack\.|protocol\.)/i;
 // Options that turn a read-only git command (`git diff|log|show`, allow-listed in
 // .claude/settings.json) into a file write (`--output=FILE`), a read of any path
 // on disk (`--no-index`) or a program run (`--ext-diff`, git grep's
@@ -669,6 +672,16 @@ const EXEC_GIT_CONFIG =
 // (`--outp=` exits 128/129 and writes nothing), so the full spelling is enough;
 // `--output-indicator-*` and `--no-ext-diff` do not match.
 const REFUSED_GIT_OPTION = /^--(?:output|no-index|ext-diff|open-files-in-pager)(?:=|$)/;
+// Options that make a network read command (`git fetch`, allow-listed in
+// .claude/settings.json) run the program they name against a local path or ssh
+// remote: `--upload-pack=CMD`, `--exec=CMD` (ls-remote, archive --remote) and
+// `-u CMD` (clone, ls-remote). Unlike the diff options above, git's option
+// parser accepts any unique prefix (`--upl=CMD` works), so match every prefix
+// from `--upl` on; `--update-head-ok` and `--exit-code` do not match.
+const GIT_UPLOAD_PACK_SUBCOMMANDS = new Set(['fetch', 'pull', 'clone', 'ls-remote', 'archive']);
+const GIT_UPLOAD_PACK_OPTION = /^--upl(?:o(?:a(?:d(?:-(?:p(?:a(?:ck?)?)?)?)?)?)?)?(?:=|$)/;
+const GIT_EXEC_OPTION = /^--e(?:x(?:ec?)?)?(?:=|$)/;
+const GIT_SHORT_UPLOAD_PACK = /^-[a-zA-Z]*u/;
 
 // Environment variables git or node read to run a program, load code, write a
 // file or switch repository/config (`GIT_EXTERNAL_DIFF=prog git diff`,
@@ -734,6 +747,20 @@ function checkGit(args, inlineEnv = {}, exported = {}) {
             `Blocked: \`git ${sub ?? ''} ${refused}\` writes a file, reads outside the repository or runs a program. ` +
                 'Read the output on stdout instead (pipe it, or use the Write tool to save it).'
         );
+    }
+    if (GIT_UPLOAD_PACK_SUBCOMMANDS.has(sub)) {
+        const program = rest.find(
+            (a) =>
+                GIT_UPLOAD_PACK_OPTION.test(a) ||
+                ((sub === 'ls-remote' || sub === 'archive') && GIT_EXEC_OPTION.test(a)) ||
+                ((sub === 'clone' || sub === 'ls-remote') && GIT_SHORT_UPLOAD_PACK.test(a))
+        );
+        if (program !== undefined) {
+            return block(
+                `Blocked: \`git ${sub} ${program}\` runs the program it names (--upload-pack, --exec, clone/ls-remote -u). ` +
+                    'Use plain `git fetch [remote]`.'
+            );
+        }
     }
     if (sub === 'push') return checkGitPush(rest);
     if (sub === 'remote') return checkGitRemote(rest);
