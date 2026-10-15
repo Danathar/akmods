@@ -68,8 +68,10 @@
 //       variables while evaluating, so overriding one (e.g. `yq`) runs any
 //       program even under `--evaluate`/`--dry-run`.
 //   H2  Executing fetch-kernel.sh, build_files/**/*.sh or tests/e2e/**/*.sh:
-//       directly, via a shell, source, `.`, wrappers, systemd-run, stdin.
-//       shellcheck, `bash -n`, cat, grep, bats are fine.
+//       directly, via a shell, source, `.`, wrappers, systemd-run, stdin, or
+//       as a bats operand or --setup-suite-file (bats runs the top level of
+//       every file it is given; a glob, brace or $ in those words is refused
+//       too). shellcheck, `bash -n`, cat, grep, bats on tests/unit are fine.
 //   H3  sudo / doas / pkexec / run0 / su in any position of a wrapper chain;
 //       distrobox enter / toolbox run|enter (the real container).
 //   H4  dnf/dnf5/yum/microdnf subcommands other than read-only queries;
@@ -1256,23 +1258,65 @@ function checkYq(args) {
 
 const BATS_FORMATTERS = new Set(['pretty', 'tap', 'tap13', 'junit']);
 
-/** bats: a formatter given by path, or a parallel binary, is a program bats runs. */
+// bats 1.11.1 options that take the next word as their value. bats parses no
+// `--name=value` form, and a short value flag is only accepted last in a pack.
+const BATS_VALUE_LONG = new Set([
+    '--filter', '--formatter', '--report-formatter', '--output', '--jobs', '--parallel-binary-name', '--tempdir',
+    '--gather-test-outputs-in', '--setup-suite-file', '--code-quote-style', '--filter-status', '--filter-tags',
+    '--line-reference-format',
+]);
+const BATS_VALUE_SHORT = /^-[a-zA-Z]*[fFoj]$/;
+
+/**
+ * bats sources every file operand and the --setup-suite-file value as shell
+ * code, so their top level runs: `bats fetch-kernel.sh` runs fetch-kernel.sh.
+ * A word the shell could expand into a host script (`fetch-kerne?.sh`,
+ * `build_files/{zfs,x}/*.sh`, `$F`) is refused too, since the expansion
+ * happens after this check reads the word.
+ */
+function checkBatsSourced(word) {
+    if (isHostScript(word)) return blockHostScript(`\`bats ${word}\` (bats runs the top level of every file it is given)`);
+    if (/[*?[{}$`]/.test(word)) {
+        return block(
+            `Blocked: \`bats ${word}\`; bats runs the top level of every file it is given, and the shell expands ` +
+                'this word before the guard can tell whether it names a host-modifying script. Name the test ' +
+                'directory or the .bats files literally (`npx --yes bats@1.11.1 tests/unit`).'
+        );
+    }
+    return null;
+}
+
+/** A formatter outside the built-in set is a path to a program bats runs. */
+function checkBatsFormatter(value) {
+    if (BATS_FORMATTERS.has(value)) return null;
+    return block(
+        `Blocked: \`bats\` formatter "${value}" is a program bats runs. Use a built-in formatter ` +
+            `(${[...BATS_FORMATTERS].join(', ')}).`
+    );
+}
+
+/** bats: a formatter given by path, a parallel binary, or a sourced host script is a program bats runs. */
 function checkBats(args) {
+    // Read the words in order, as bats does: a value option consumes the next
+    // word whatever it looks like, so `-f --filter x` makes x an operand.
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
-        let value;
-        const m = /^(--formatter|--report-formatter)(?:=(.*))?$/s.exec(a);
-        if (m) value = m[2] !== undefined ? m[2] : (args[i + 1] ?? '');
-        else if (a === '-F') value = args[i + 1] ?? '';
-        else if (/^-F./.test(a)) value = a.slice(2);
-        else if (a === '--parallel-binary-name' || a.startsWith('--parallel-binary-name=')) {
-            return block('Blocked: `bats --parallel-binary-name` names a program bats runs.');
+        let r = null;
+        if (BATS_VALUE_LONG.has(a) || BATS_VALUE_SHORT.test(a)) {
+            const value = args[++i] ?? '';
+            if (a === '--parallel-binary-name') r = block('Blocked: `bats --parallel-binary-name` names a program bats runs.');
+            else if (a === '--setup-suite-file') r = checkBatsSourced(value);
+            else if (a === '--formatter' || a === '--report-formatter' || a.endsWith('F')) r = checkBatsFormatter(value);
+        } else if (!a.startsWith('-')) {
+            r = checkBatsSourced(a);
+        } else if (a.startsWith('--parallel-binary-name=')) {
+            r = block('Blocked: `bats --parallel-binary-name` names a program bats runs.');
+        } else {
+            // Spellings bats itself rejects today, refused anyway in case a later release accepts them.
+            const m = /^(?:--formatter=|--report-formatter=|-F)(.+)$/s.exec(a);
+            if (m) r = checkBatsFormatter(m[1]);
         }
-        if (value === undefined || BATS_FORMATTERS.has(value)) continue;
-        return block(
-            `Blocked: \`bats\` formatter "${value}" is a program bats runs. Use a built-in formatter ` +
-                `(${[...BATS_FORMATTERS].join(', ')}).`
-        );
+        if (r) return r;
     }
     return null;
 }
