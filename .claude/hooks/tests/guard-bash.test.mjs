@@ -124,6 +124,12 @@ const allowed = [
     'npx --yes bats@1.11.1 tests/unit -F pretty',
     'npx --yes bats@1.11.1 tests/unit -Fjunit',
     'npx --yes bats@1.11.1 tests/unit --formatter=tap13',
+    // H2: bats operands that are not host scripts, and option values bats does not source
+    'npx --yes bats@1.11.1 tests/unit/zfs_flavor_deps.bats tests/unit/fork_patches.bats',
+    'npx --yes bats@1.11.1 -r tests/unit',
+    "npx --yes bats@1.11.1 tests/unit -f 'zfs.*flavor'",
+    'npx --yes bats@1.11.1 tests/unit --filter-tags zfs -j 2',
+    'npx --yes bats@1.11.1 tests/unit -rF tap',
     // -p takes a value, so the s in json is not --split-exp
     "yq -pjson '.' build/cache.json",
 ];
@@ -349,6 +355,23 @@ const blocked = [
     ['npx --yes bats@1.11.1 -F /tmp/x.sh tests/unit', 'is a program bats runs'],
     ['bats -F /tmp/x.sh tests/unit', 'is a program bats runs'],
     ['yq --split-exp-file=split.yq images.yaml', 'yq --split-exp-file'],
+    // H2: bats runs the top level of every file operand and of --setup-suite-file
+    ['npx --yes bats@1.11.1 tests/unit fetch-kernel.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 tests/unit ./build_files/zfs/build-kmod-zfs.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 tests/unit tests/e2e/run.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 tests/unit --setup-suite-file fetch-kernel.sh', 'installs packages'],
+    ['bats tests/unit/../../fetch-kernel.sh', 'installs packages'],
+    // a value option takes the next word whatever it is, so the word after that is an operand
+    ['npx --yes bats@1.11.1 tests/unit -f --filter fetch-kernel.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 tests/unit -j 2 build_files/prep/build-prep.sh', 'installs packages'],
+    // the shell expands these into a host script after the guard has read them
+    ['npx --yes bats@1.11.1 tests/unit fetch-kerne?.sh', 'shell expands'],
+    ['npx --yes bats@1.11.1 tests/unit build_files/*/build-kmod-zfs.sh', 'bats runs the top level'],
+    ['npx --yes bats@1.11.1 tests/unit fetch-kernel.s[h]', 'shell expands'],
+    ['npx --yes bats@1.11.1 tests/unit {fetch-kernel,x}.sh', 'shell expands'],
+    ['npx --yes bats@1.11.1 tests/unit --setup-suite-file fetch-*', 'shell expands'],
+    // a short value flag last in a pack still names the formatter
+    ['npx --yes bats@1.11.1 tests/unit -rF /tmp/x.sh', 'is a program bats runs'],
     // systemd-run and flatpak-spawn run the linter outside this shell; look through to it
     ['flatpak-spawn --host actionlint -shellcheck=/tmp/x.sh', 'actionlint -shellcheck'],
     ["systemd-run --user yq -i '.defaults.version = \"99\"' images.yaml", 'yq -i'],
