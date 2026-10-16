@@ -49,6 +49,12 @@ const allowed = [
     'git fetch --prune origin',
     'git fetch --update-head-ok origin',
     'git fetch origin main',
+    // T3: -u is --update-head-ok on fetch, not --upload-pack; long options
+    // with a u in them, and --exit-code next to --exec, are not the program
+    'git fetch -u origin main',
+    'git ls-remote --quiet origin',
+    'git ls-remote --exit-code origin main',
+    'git clone --quiet https://github.com/ublue-os/akmods.git /tmp/akmods',
     'git merge upstream/main',
     'git remote -v',
     'git remote add upstream https://github.com/ublue-os/akmods.git',
@@ -130,6 +136,10 @@ const allowed = [
     "npx --yes bats@1.11.1 tests/unit -f 'zfs.*flavor'",
     'npx --yes bats@1.11.1 tests/unit --filter-tags zfs -j 2',
     'npx --yes bats@1.11.1 tests/unit -rF tap',
+    // option values bats does not source may hold a $ or a regex
+    'npx --yes bats@1.11.1 tests/unit -o "$TMPDIR/bats"',
+    'npx --yes bats@1.11.1 tests/unit --output "$TMPDIR/bats"',
+    "npx --yes bats@1.11.1 tests/unit --filter 'zfs.*flavor'",
     // -p takes a value, so the s in json is not --split-exp
     "yq -pjson '.' build/cache.json",
 ];
@@ -214,6 +224,13 @@ const blocked = [
     ['git ls-remote --exec=x .', 'runs the program'],
     ['git archive --remote=. --exec=x HEAD', 'runs the program'],
     ['git -c protocol.ext.allow=always fetch ext::sh', 'run a program'],
+    // git accepts any unique prefix of a long option, and packs short flags
+    ['git fetch --uploa=x ../src', 'runs the program'],
+    ['git fetch --upload-pac=x ../src', 'runs the program'],
+    ['git ls-remote --exe=x .', 'runs the program'],
+    ['git archive --remote=. --ex=x HEAD', 'runs the program'],
+    ['git ls-remote -u x .', 'runs the program'],
+    ['git clone -qu x src dst', 'runs the program'],
     // --- T4: xargs ---
     ["printf '%s\\n' --output=/home/u/.bashrc | xargs git log -1", 'xargs git'],
     // --- T5: bash -n turned back into a run ---
@@ -372,6 +389,17 @@ const blocked = [
     ['npx --yes bats@1.11.1 tests/unit --setup-suite-file fetch-*', 'shell expands'],
     // a short value flag last in a pack still names the formatter
     ['npx --yes bats@1.11.1 tests/unit -rF /tmp/x.sh', 'is a program bats runs'],
+    // bats 1.11.1 flags that take no value leave the next word an operand
+    ['npx --yes bats@1.11.1 -r fetch-kernel.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 -c fetch-kernel.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 -t fetch-kernel.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 -x fetch-kernel.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 --recursive fetch-kernel.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 --tap fetch-kernel.sh', 'installs packages'],
+    ['npx --yes bats@1.11.1 --timing fetch-kernel.sh', 'installs packages'],
+    // a variable or command substitution is expanded after the guard reads it
+    ['npx --yes bats@1.11.1 tests/unit $F', 'shell expands'],
+    ['npx --yes bats@1.11.1 tests/unit `echo fetch-kernel.sh`', 'shell expands'],
     // systemd-run and flatpak-spawn run the linter outside this shell; look through to it
     ['flatpak-spawn --host actionlint -shellcheck=/tmp/x.sh', 'actionlint -shellcheck'],
     ["systemd-run --user yq -i '.defaults.version = \"99\"' images.yaml", 'yq -i'],
