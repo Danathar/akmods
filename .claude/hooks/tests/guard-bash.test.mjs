@@ -96,6 +96,14 @@ const allowed = [
     'just -fJustfile --dry-run build',
     'just --ceiling .. --list',
     'just --list --list-heading "Recipes/"',
+    // The checkout's own Justfile as the next word or after `=`: the value is
+    // consumed, so `./Justfile` is not mistaken for a `DIR/recipe` argument.
+    'just -f ./Justfile --evaluate',
+    'just --justfile ./Justfile --dry-run build',
+    'just -f=Justfile --evaluate',
+    // Value options whose value may hold a slash; it is not a recipe either.
+    'just --ceiling /tmp --list',
+    'just --cygpath /usr/bin/cygpath --list',
     'AKMODS_KERNEL=main just --evaluate version',
     // --- package-manager / container / signing reads ---
     'dnf list installed',
@@ -288,6 +296,13 @@ const blocked = [
     ['just --evaluate --dotenv-path /tmp/x.env', 'just --dotenv-path'],
     ['just --evaluate -F other.env', 'just -F'],
     ['just --evaluate --dotenv-filename other.env', 'just --dotenv-filename'],
+    // `Justfile` is the one value allowed, and only for `--justfile`/`-f`:
+    // `--dotenv-command Justfile` runs a program by that name, and `-g` takes
+    // no value, so the word after it is a recipe and the global justfile loads.
+    ['just --evaluate --dotenv-command Justfile', 'just --dotenv-command'],
+    ['just --evaluate -g Justfile', 'just -g'],
+    // An attached value with no slash still names another justfile.
+    ['just --evaluate -fother.just', 'just -f'],
     ['just --evaluate ../other/', '../other/'],
     ['just --dry-run /tmp/other/build', '/tmp/other/build'],
     ['just --evaluate -- ../other/x', '../other/x'],
