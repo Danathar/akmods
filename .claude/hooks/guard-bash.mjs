@@ -56,7 +56,8 @@
 //   T5  `bash -n` with a word starting with + or one bash could expand into one.
 //   node
 //   N1  `node --test` with any option outside the test-runner allowlist, and
-//       node with NODE_OPTIONS or another NODE_* variable.
+//       node with NODE_OPTIONS or another NODE_* variable. `node --test` after a
+//       directory change (see C1).
 //   Host safety
 //   H1  just: only read-only evaluation (`--list`, `--evaluate`, `--dry-run`,
 //       `--show`, `--summary`, `--dump`, `--fmt --check`, bare `just`). Naming
@@ -71,7 +72,7 @@
 //       checkout's Justfile, `--justfile-name`, `-g`, `-d`, `--dotenv-path`,
 //       `--dotenv-filename`, a `DIR/recipe` argument, any JUST_* variable):
 //       evaluation runs every backtick and shell() in it. `--dotenv-command`
-//       runs its command outright.
+//       runs its command outright. Any `just` after a directory change (C1).
 //   H2  Executing fetch-kernel.sh, build_files/**/*.sh or tests/e2e/**/*.sh:
 //       directly, via a shell, source, `.`, wrappers, systemd-run, stdin, or
 //       as a bats operand or --setup-suite-file (bats runs the top level of
@@ -94,6 +95,15 @@
 //       --split-exp-file and --security-enable-system-operator; bats (also
 //       through npx) -F/--formatter or --report-formatter naming anything but
 //       a built-in formatter, and --parallel-binary-name.
+//   Working directory
+//   C1  just, `node --test` and bats (also through npx) when the working
+//       directory may differ from the checkout root: `cd`, `pushd` or `popd`
+//       anywhere in the same command line (a `( cd DIR && ... )` subshell or a
+//       substitution included), or `env -C DIR`. just looks for its justfile from the
+//       current directory upwards, so `cd sub && just --evaluate` evaluates
+//       sub/justfile, and `--justfile Justfile`, `node --test .claude/hooks/tests`
+//       and `bats tests/unit` name files relative to it: the pre-approved forms
+//       would run another directory's code. Run them from the checkout root.
 //   Signing material
 //   K1  Writes (redirect, tee, cp, mv, install, ln, truncate, dd of=,
 //       openssl -out/-keyout) to certs/ files other than *.test, or to any
@@ -777,7 +787,9 @@ function checkGit(args, inlineEnv = {}, exported = {}) {
 
 /** Writes to push-redirecting config keys (`git config remote.origin.url ...`). */
 function checkGitConfig(rest) {
-    const readOnly = ['--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l', '--show-origin', '--show-scope'];
+    // Only flags that pick a read mode. --show-origin/--show-scope are display
+    // modifiers: `git config --show-scope remote.origin.url URL` still writes.
+    const readOnly = ['--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l'];
     if (rest.some((a) => readOnly.includes(a))) return null;
 
     // Collect positionals, skipping the values of options that take one
@@ -1001,6 +1013,29 @@ function blockHostScript(what) {
         `Blocked: ${what} would execute a script that installs packages, downloads kernels or builds containers on this ` +
             'machine (fetch-kernel.sh, build_files/**, tests/e2e/**). Verify with shellcheck, `bash -n`, ' +
             '`npx --yes bats@1.11.1 tests/unit`; container/e2e runs happen in GitHub Actions on the pull request.'
+    );
+}
+
+// Commands that change the shell's working directory (C1).
+const CHDIR = new Set(['cd', 'pushd', 'popd']);
+
+/**
+ * C1: true if a tokenized segment runs cd/pushd/popd (also as `builtin cd`,
+ * `command cd`, or after `if`/`{`/NAME=value words).
+ */
+function changesDirectory(words) {
+    let k = 0;
+    while (k < words.length && (isAssignment(words[k]) || KEYWORDS.has(words[k]) || WRAPPERS.has(basename(words[k])) || words[k].startsWith('-'))) k++;
+    return k < words.length && CHDIR.has(basename(words[k]));
+}
+
+/** C1: a path-relative pre-approved command run after the working directory may have changed. */
+function refuseMovedCwd(what) {
+    return block(
+        `Blocked: \`${what}\` after a directory change (cd, pushd, popd, env -C). just finds its justfile from the ` +
+            'current directory, and the pre-approved `just`, `node --test` and bats forms name files relative to it, ' +
+            'so from another directory they would evaluate or run that directory\'s code. Run them from the checkout ' +
+            'root, with no cd/pushd/popd in the same command line.'
     );
 }
 
@@ -1365,10 +1400,11 @@ function checkBats(args) {
     return null;
 }
 
-/** npx: check the bats command line when npx runs bats. */
-function checkNpx(args) {
+/** npx: check the bats command line when npx runs bats (and C1 when the directory may have changed). */
+function checkNpx(args, moved = false) {
     const at = args.findIndex((a) => /^bats(@[^/\s]*)?$/.test(a));
-    return at === -1 ? null : checkBats(args.slice(at + 1));
+    if (at === -1) return null;
+    return checkBats(args.slice(at + 1)) ?? (moved ? refuseMovedCwd(`npx ${args[at]}`) : null);
 }
 
 // ---------------------------------------------------------------------------
@@ -1467,6 +1503,8 @@ function checkSegment(words, state) {
     // Set once the segment runs through xargs: xargs appends words it reads at
     // run time, so no argument check below sees the real command line.
     let xargsFed = false;
+    // C1: the working directory may differ from the checkout root.
+    let moved = Boolean(state.cwdMoved);
     for (;;) {
         while (w.length && (isAssignment(w[0]) || KEYWORDS.has(w[0]))) {
             if (isAssignment(w[0])) {
@@ -1489,6 +1527,7 @@ function checkSegment(words, state) {
                 const a = w[k];
                 if (isAssignment(a)) continue;
                 if (!a.startsWith('-')) break; // first word of the wrapped command
+                if (a === '-C' || a === '--chdir' || /^-C./.test(a) || a.startsWith('--chdir=')) moved = true;
                 if (['-u', '--unset', '-C', '--chdir'].includes(a)) {
                     k++;
                     continue;
@@ -1503,10 +1542,11 @@ function checkSegment(words, state) {
                 if (script === null) continue;
                 // Check the string on its own, then as the head of the command
                 // that still has the remaining words appended.
-                const alone = checkCommand(script, state);
+                const st = moved ? Object.assign(Object.create(state), { cwdMoved: true }) : state;
+                const alone = checkCommand(script, st);
                 if (alone) return alone;
                 const head = tokenize(script).flat();
-                return checkSegment([...head, ...w.slice(rest)], state);
+                return checkSegment([...head, ...w.slice(rest)], st);
             }
         }
         // Look through the wrapper to the command it runs: skip its own options
@@ -1525,6 +1565,11 @@ function checkSegment(words, state) {
 
     const cmd = basename(w[0]);
     const args = w.slice(1);
+    // C1 (checkCommand has usually set this already for the whole command line).
+    if (CHDIR.has(cmd)) {
+        state.cwdMoved = true;
+        return null;
+    }
     // `printf '%s\n' --output=FILE | xargs git log` and
     // `printf '%s\n' +n -c CMD | xargs bash -n` reach git and bash with
     // options this hook never sees, under the git log and bash -n allow rules.
@@ -1536,7 +1581,8 @@ function checkSegment(words, state) {
     }
     // Nested analysis (`bash -c '...'`, `eval`) sees the same exported state, but
     // anything it exports stays inside it, as in a real subshell.
-    const nested = (extra = {}) => Object.assign(Object.create(state), extra);
+    // A directory change (env -C) carries into it.
+    const nested = (extra = {}) => Object.assign(Object.create(state), moved ? { cwdMoved: true } : {}, extra);
 
     if (cmd === 'export' || ((cmd === 'declare' || cmd === 'typeset') && args.some((a) => /^-[a-zA-Z]*x/.test(a)))) {
         for (const a of args) {
@@ -1556,7 +1602,10 @@ function checkSegment(words, state) {
         return checkGh(args, envRepo);
     }
     if (cmd === 'git') return checkGit(args, inlineEnv, state.exportedEnv ?? {});
-    if (cmd === 'node' || cmd === 'nodejs') return checkNode(cmd, args, { ...(state.exportedEnv ?? {}), ...inlineEnv });
+    if (cmd === 'node' || cmd === 'nodejs') {
+        const r = checkNode(cmd, args, { ...(state.exportedEnv ?? {}), ...inlineEnv });
+        return r ?? (moved && args.includes('--test') ? refuseMovedCwd(`${cmd} --test`) : null);
+    }
     if (isHostScript(w[0])) return blockHostScript(`Running ${w[0]}`);
     if (cmd === 'source' || cmd === '.') {
         return args.some(isHostScript) ? blockHostScript(`Sourcing ${args.find(isHostScript)}`) : null;
@@ -1628,12 +1677,12 @@ function checkSegment(words, state) {
     if (DNF.has(cmd)) return checkDnf(cmd, args);
     if (cmd === 'rpm') return checkRpm(args);
     if (cmd === 'rpm-ostree' || cmd === 'bootc' || cmd === 'pkcon') return checkImageTool(cmd, args);
-    if (cmd === 'just') return checkJust(args, { ...(state.exportedEnv ?? {}), ...inlineEnv });
+    if (cmd === 'just') return checkJust(args, { ...(state.exportedEnv ?? {}), ...inlineEnv }) ?? (moved ? refuseMovedCwd('just') : null);
     if (cmd === 'systemd-run' || cmd === 'flatpak-spawn') {
         // They run a command outside this shell's cwd: look through to it.
         const at = args.findIndex((a) => isHostScript(a) || LOOKTHROUGH.has(basename(a)));
         if (at !== -1) {
-            const r = checkSegment(args.slice(at), state);
+            const r = checkSegment(args.slice(at), moved ? nested() : state);
             if (r) return r;
         }
         const target = args.find(isHostScript);
@@ -1645,18 +1694,25 @@ function checkSegment(words, state) {
     if (cmd === 'skopeo') return checkSkopeo(args);
     if (cmd === 'actionlint') return checkActionlint(args);
     if (cmd === 'yq') return checkYq(args);
-    if (cmd === 'bats') return checkBats(args);
-    if (cmd === 'npx') return checkNpx(args);
+    if (cmd === 'bats') return checkBats(args) ?? (moved ? refuseMovedCwd('bats') : null);
+    if (cmd === 'npx') return checkNpx(args, moved);
     return null;
 }
 
 /** Analyse a command line. Returns null if allowed, else { blocked, reason }. */
 export function checkCommand(command, state = {}) {
+    // C1: a directory change anywhere in the command line counts for all of it.
+    // Substitutions are checked before the segments around them (so
+    // `cd sub && echo "$(just --evaluate)"` must already know about the cd), and
+    // `( cd DIR && ... )` ends at the `)` but is not tracked as a scope: fail
+    // closed rather than follow subshell nesting and execution order.
+    const segments = tokenize(command);
+    if (segments.some(changesDirectory)) state.cwdMoved = true;
     for (const sub of extractSubstitutions(command)) {
         const r = checkCommand(sub, state);
         if (r) return r;
     }
-    for (const words of tokenize(command)) {
+    for (const words of segments) {
         const r = checkSegment(words, state);
         if (r) return r;
     }
