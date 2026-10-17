@@ -66,7 +66,12 @@
 //       (`--set NAME VALUE`, `--set=...`, `NAME=VALUE` before or after `--`)
 //       are refused too: the Justfile builds `shell()` commands from its
 //       variables while evaluating, so overriding one (e.g. `yq`) runs any
-//       program even under `--evaluate`/`--dry-run`.
+//       program even under `--evaluate`/`--dry-run`. So is choosing another
+//       justfile or environment file (`--justfile`/`-f` other than this
+//       checkout's Justfile, `--justfile-name`, `-g`, `-d`, `--dotenv-path`,
+//       `--dotenv-filename`, a `DIR/recipe` argument, any JUST_* variable):
+//       evaluation runs every backtick and shell() in it. `--dotenv-command`
+//       runs its command outright.
 //   H2  Executing fetch-kernel.sh, build_files/**/*.sh or tests/e2e/**/*.sh:
 //       directly, via a shell, source, `.`, wrappers, systemd-run, stdin, or
 //       as a bats operand or --setup-suite-file (bats runs the top level of
@@ -1079,13 +1084,38 @@ const JUST_READ_SHORT = new Set(['l', 'n', 's', 'h', 'V']);
 // Options that run something else, edit files or change the shell used for backticks.
 const JUST_REFUSED_LONG = new Set(['--edit', '--init', '--command', '--choose', '--chooser', '--shell', '--shell-arg', '--shell-command']);
 const JUST_REFUSED_SHORT = new Set(['e', 'c']);
-const JUST_VALUE_LONG = new Set([
-    '--justfile', '--working-directory', '--dotenv-filename', '--dotenv-path', '--color', '--command-color',
-    '--dump-format', '--list-heading', '--list-prefix', '--tempdir', '--timestamp-format', '--global-justfile',
+// Options that pick which justfile is evaluated or what goes into the
+// environment of its backticks and shell() calls. `--evaluate`/`--dry-run`
+// still run every backtick and shell() in the chosen justfile, and
+// `--dotenv-command CMD` runs CMD outright, so each one turns a read-only
+// evaluation into running a program. `--justfile`/`-f` stays allowed for this
+// checkout's own Justfile (JUST_OWN_JUSTFILE).
+const JUST_SOURCE_LONG = new Set([
+    '--justfile', '--justfile-name', '--global-justfile', '--working-directory',
+    '--dotenv-command', '--dotenv-path', '--dotenv-filename',
 ]);
-const JUST_VALUE_SHORT = new Set(['f', 'd', 'E']);
+const JUST_SOURCE_SHORT = new Set(['f', 'g', 'd', 'E', 'F']);
+const JUST_OWN_JUSTFILE = new Set(['Justfile', './Justfile']);
+const JUST_VALUE_LONG = new Set([
+    '--color', '--command-color', '--dump-format', '--list-heading', '--list-prefix', '--tempdir',
+    '--timestamp-format', '--ceiling', '--alias-style', '--cygpath',
+]);
+// The same choices made through just's environment variables
+// (JUST_JUSTFILE, JUST_DOTENV_COMMAND, ...); every JUST_* setting is refused.
+const JUST_ENV = /^JUST_/;
 
-function checkJust(args) {
+function refuseJustSource(option) {
+    return block(
+        `Blocked: \`just ${option}\` picks another justfile or environment file, or runs a command to load one. ` +
+            '`--evaluate` and `--dry-run` still run every backtick and shell() call in the justfile they load, and ' +
+            '`--dotenv-command` runs its command outright, so only this checkout\'s own Justfile may be evaluated ' +
+            '(`just --evaluate`, or `--justfile Justfile`).'
+    );
+}
+
+function checkJust(args, env = {}) {
+    const envKey = Object.keys(env).find((k) => JUST_ENV.test(k));
+    if (envKey) return refuseJustSource(`with ${envKey}=`);
     let read = false;
     let fmt = false;
     let check = false;
@@ -1102,6 +1132,12 @@ function checkJust(args) {
             if (JUST_REFUSED_LONG.has(name)) {
                 return block(`Blocked: \`just ${name}\` runs another command, edits files or changes the shell; only read-only evaluation is allowed.`);
             }
+            if (JUST_SOURCE_LONG.has(name)) {
+                const value = a.includes('=') ? a.slice(a.indexOf('=') + 1) : args[i + 1];
+                if (name !== '--justfile' || !JUST_OWN_JUSTFILE.has(value)) return refuseJustSource(name);
+                if (!a.includes('=')) i++;
+                continue;
+            }
             if (name === '--fmt') fmt = true;
             else if (name === '--check') check = true;
             else if (JUST_READ_LONG.has(name)) read = true;
@@ -1112,14 +1148,18 @@ function checkJust(args) {
             else if (JUST_VALUE_LONG.has(name) && !a.includes('=')) i++;
             continue;
         }
-        if (/^-[a-zA-Z]+$/.test(a)) {
+        if (/^-[a-zA-Z]/.test(a)) {
             for (let k = 1; k < a.length; k++) {
                 const ch = a[k];
                 if (JUST_REFUSED_SHORT.has(ch)) {
                     return block(`Blocked: \`just -${ch}\` edits the Justfile or runs another command; only read-only evaluation is allowed.`);
                 }
                 if (JUST_READ_SHORT.has(ch)) read = true;
-                if (JUST_VALUE_SHORT.has(ch)) {
+                if (JUST_SOURCE_SHORT.has(ch)) {
+                    // A value may be attached (`-fPATH`, `-f=PATH`) or be the next word.
+                    const attached = a.slice(k + 1).replace(/^=/, '');
+                    const value = k === a.length - 1 ? args[i + 1] : attached;
+                    if (ch !== 'f' || !JUST_OWN_JUSTFILE.has(value)) return refuseJustSource(`-${ch}`);
                     if (k === a.length - 1) i++;
                     break;
                 }
@@ -1128,6 +1168,10 @@ function checkJust(args) {
         }
         (isAssignment(a) ? overrides : recipes).push(a);
     }
+    // `just DIR/recipe` (any argument with a slash) searches DIR for a justfile
+    // and evaluates that one instead of this checkout's.
+    const searched = recipes.find((r) => r.includes('/'));
+    if (searched) return refuseJustSource(searched);
     if (fmt && !check && !read) {
         return block('Blocked: `just --fmt` rewrites the Justfile; use `just --fmt --check` or `just --dump`.');
     }
@@ -1501,7 +1545,7 @@ function checkSegment(words, state) {
             // `export NAME` without a value exports an earlier assignment: value unknown (null).
             const eq = a.indexOf('=');
             const name = eq === -1 ? a : a.slice(0, eq);
-            if (/^(GIT_CONFIG_|GIT_SSH)/i.test(name) || WATCHED_ENV.test(name)) {
+            if (/^(GIT_CONFIG_|GIT_SSH)/i.test(name) || WATCHED_ENV.test(name) || JUST_ENV.test(name)) {
                 (state.exportedEnv ??= {})[name] = eq === -1 ? null : a.slice(eq + 1);
             }
         }
@@ -1584,7 +1628,7 @@ function checkSegment(words, state) {
     if (DNF.has(cmd)) return checkDnf(cmd, args);
     if (cmd === 'rpm') return checkRpm(args);
     if (cmd === 'rpm-ostree' || cmd === 'bootc' || cmd === 'pkcon') return checkImageTool(cmd, args);
-    if (cmd === 'just') return checkJust(args);
+    if (cmd === 'just') return checkJust(args, { ...(state.exportedEnv ?? {}), ...inlineEnv });
     if (cmd === 'systemd-run' || cmd === 'flatpak-spawn') {
         // They run a command outside this shell's cwd: look through to it.
         const at = args.findIndex((a) => isHostScript(a) || LOOKTHROUGH.has(basename(a)));
