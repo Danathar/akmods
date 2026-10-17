@@ -1,6 +1,6 @@
 // Tests for .claude/hooks/guard-bash.mjs. Each case spawns the hook exactly as
 // Claude Code does: JSON on stdin, decision from the exit code (0 allow, 2
-// block) and stderr. One block case per rule (G1-G5, T1-T5, N1, H1-H6, L1, K1 in
+// block) and stderr. One block case per rule (G1-G5, T1-T5, N1, H1-H6, L1, C1, K1 in
 // the hook's header), each next to the allowed counterpart that must keep
 // working.
 import { test } from 'node:test';
@@ -60,6 +60,9 @@ const allowed = [
     'git remote add upstream https://github.com/ublue-os/akmods.git',
     'git remote set-url --push upstream DISABLE',
     'git config --get remote.origin.url',
+    'git config --show-origin --list',
+    'git config --show-scope --get remote.origin.url',
+    'git config get --show-origin remote.origin.url',
     'git push origin acmm/c',
     'GIT_AUTHOR_NAME=x GIT_AUTHOR_EMAIL=x@example.com git commit -m msg',
     // --- gh: reads anywhere, writes to the fork only ---
@@ -105,6 +108,12 @@ const allowed = [
     'just --ceiling /tmp --list',
     'just --cygpath /usr/bin/cygpath --list',
     'AKMODS_KERNEL=main just --evaluate version',
+    // C1: with no directory change in the command line, just and the test
+    // runners run from the checkout root; a cd alone, or as data, is fine.
+    'git status && just --evaluate',
+    'echo cd && just --evaluate',
+    'grep -n pushd Justfile && node --test .claude/hooks/tests',
+    'cd docs && ls',
     // --- package-manager / container / signing reads ---
     'dnf list installed',
     'dnf repoquery kernel',
@@ -217,6 +226,12 @@ const blocked = [
     ['git config url.https://x/.insteadOf https://github.com/Danathar/akmods', 'redirect pushes'],
     ['git config credential.helper store', 'credentials'],
     ['git config --edit', 'redirect pushes'],
+    // --show-origin/--show-scope only change how a read is printed; git 2.47
+    // still writes `key value` with --show-scope, so they do not make it a read.
+    ['git config --show-scope remote.origin.url https://github.com/someone/other.git', 'could redirect'],
+    ['git config --show-origin remote.origin.url https://github.com/someone/other.git', 'could redirect'],
+    ['git config --show-scope url.https://github.com/someone/.insteadOf https://github.com/Danathar/', 'could redirect'],
+    ['git config set --show-scope remote.origin.pushurl https://github.com/someone/other.git', 'could redirect'],
     ['git -c remote.origin.pushurl=https://x push origin main', 'redirect pushes'],
     // --- T3: pre-approved read commands turned into writes / program runs ---
     ['git diff --output=/home/u/.bashrc', 'writes a file'],
@@ -308,6 +323,27 @@ const blocked = [
     ['just --evaluate -- ../other/x', '../other/x'],
     ['JUST_JUSTFILE=/dev/stdin just --evaluate', 'JUST_JUSTFILE='],
     ["JUST_DOTENV_COMMAND='touch MARKER' just --list", 'JUST_DOTENV_COMMAND='],
+    // --- C1: just / node --test / bats after a directory change ---
+    // just finds its justfile from the current directory, so each of these
+    // evaluates another directory's justfile (`--justfile Justfile` included).
+    ['cd sub && just --evaluate', 'after a directory change'],
+    ['cd sub; just --justfile Justfile --evaluate', 'after a directory change'],
+    ['(cd sub && just --dry-run build)', 'after a directory change'],
+    ['pushd sub && just --list', 'after a directory change'],
+    ['cd .. && just --evaluate', 'after a directory change'],
+    ['cd /tmp && just --evaluate', 'after a directory change'],
+    ['popd; just --evaluate', 'after a directory change'],
+    ['builtin cd sub && just --evaluate', 'after a directory change'],
+    ['if cd sub; then just --list; fi', 'after a directory change'],
+    ['env -C sub just --evaluate', 'after a directory change'],
+    ['env --chdir=sub just --evaluate', 'after a directory change'],
+    ["bash -c 'cd sub && just --evaluate'", 'after a directory change'],
+    // substitutions are checked before the segments around them
+    ['cd sub && echo "$(just --evaluate)"', 'after a directory change'],
+    // the test runners name their files relative to the working directory too
+    ['cd sub && node --test .claude/hooks/tests', 'after a directory change'],
+    ['cd sub && npx --yes bats@1.11.1 tests/unit', 'after a directory change'],
+    ['cd sub && bats tests/unit', 'after a directory change'],
     ["env JUST_DOTENV_COMMAND='touch MARKER' just --evaluate", 'JUST_DOTENV_COMMAND='],
     ["export JUST_DOTENV_COMMAND='touch MARKER'; just --evaluate", 'JUST_DOTENV_COMMAND='],
     ["just --evaluate --set=yq 'touch MARKER; true' kernel_flavor", 'variable override'],
