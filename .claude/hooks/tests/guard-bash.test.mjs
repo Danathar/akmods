@@ -114,6 +114,8 @@ const allowed = [
     'echo cd && just --evaluate',
     'grep -n pushd Justfile && node --test .claude/hooks/tests',
     'cd docs && ls',
+    // C1 refuses only the test runners: other node commands after a cd still run.
+    'cd sub && node --version',
     // --- package-manager / container / signing reads ---
     'dnf list installed',
     'dnf repoquery kernel',
@@ -281,6 +283,8 @@ const blocked = [
     ['just AKMODS_VERSION=44 build', 'build'],
     ['just --justfile Justfile build', 'build'],
     ['cd /tmp && just push', 'push'],
+    // The recipe rule's reason comes before C1's: it names what would run.
+    ['cd /tmp && just push', 'host-heavy recipe'],
     ['env FOO=1 just push', 'push'],
     ['timeout 5 just clean', 'clean'],
     ["bash -c 'just build'", 'build'],
@@ -340,6 +344,23 @@ const blocked = [
     ["bash -c 'cd sub && just --evaluate'", 'after a directory change'],
     // substitutions are checked before the segments around them
     ['cd sub && echo "$(just --evaluate)"', 'after a directory change'],
+    // ...so the cd has to be found in every spelling before them: after an
+    // assignment, a keyword, a wrapper, or a wrapper's option.
+    ['X=1 cd sub && echo "$(just --evaluate)"', 'after a directory change'],
+    ['if cd sub; then echo "$(just --evaluate)"; fi', 'after a directory change'],
+    ['builtin cd sub && echo "$(just --evaluate)"', 'after a directory change'],
+    ['command -p cd sub && echo "$(just --evaluate)"', 'after a directory change'],
+    // env -C in each spelling, and carried into what env runs: a -S string,
+    // a shell -c script, or a command flatpak-spawn/systemd-run look through to.
+    ['env --chdir sub just --evaluate', 'after a directory change'],
+    ['env -Csub just --evaluate', 'after a directory change'],
+    ["env -C sub -S 'just --evaluate'", 'after a directory change'],
+    ["env -C sub --split-string='just --evaluate'", 'after a directory change'],
+    ["env -C sub bash -c 'just --evaluate'", 'after a directory change'],
+    ['env -C sub sh -c "just --evaluate"', 'after a directory change'],
+    ["env -C sub nohup bash -c 'just --evaluate'", 'after a directory change'],
+    ['env -C sub flatpak-spawn --host just --evaluate', 'after a directory change'],
+    ['env -C sub systemd-run --user just --evaluate', 'after a directory change'],
     // the test runners name their files relative to the working directory too
     ['cd sub && node --test .claude/hooks/tests', 'after a directory change'],
     ['cd sub && npx --yes bats@1.11.1 tests/unit', 'after a directory change'],
