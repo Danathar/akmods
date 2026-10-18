@@ -116,6 +116,12 @@ const allowed = [
     'cd docs && ls',
     // C1 refuses only the test runners: other node commands after a cd still run.
     'cd sub && node --version',
+    'eval echo cd; just --evaluate',
+    'echo $HOME; just --evaluate',
+    // Packed and abbreviated wrapper options still reach the command they wrap.
+    'env -iu X just --evaluate',
+    'timeout -v 10 just --list',
+    'nice --adj 5 just --list',
     // --- package-manager / container / signing reads ---
     'dnf list installed',
     'dnf repoquery kernel',
@@ -361,6 +367,38 @@ const blocked = [
     ["env -C sub nohup bash -c 'just --evaluate'", 'after a directory change'],
     ['env -C sub flatpak-spawn --host just --evaluate', 'after a directory change'],
     ['env -C sub systemd-run --user just --evaluate', 'after a directory change'],
+    // eval runs its words in this shell, a function body runs when the
+    // function is called, and an expanded command name could be cd.
+    ['eval cd sub; just --evaluate', 'after a directory change'],
+    ["eval 'pushd sub'; node --test .claude/hooks/tests", 'after a directory change'],
+    ['eval cd sub && echo "$(just --evaluate)"', 'after a directory change'],
+    ['function f { cd sub; }; f; just --evaluate', 'after a directory change'],
+    ['X=cd; $X sub; just --evaluate', 'after a directory change'],
+    // env -C packed with another option or abbreviated.
+    ['env -iC sub just --evaluate', 'after a directory change'],
+    ['env -iCsub just --evaluate', 'after a directory change'],
+    ['env --ch sub just --evaluate', 'after a directory change'],
+    ['env --chdi=sub just --evaluate', 'after a directory change'],
+    // --- wrapper options as getopt reads them: a packed (`-iu X`) or
+    // abbreviated (`--uns X`) option's value is not the wrapped command ---
+    ['env -iu X ./fetch-kernel.sh', 'installs packages'],
+    ['env --uns X ./fetch-kernel.sh', 'installs packages'],
+    ['env -iu X git push --force', 'force push'],
+    ['env -iC . sudo ls', 'privilege escalation'],
+    ["env -iS 'just push'", 'host-heavy recipe'],
+    ["env -vS 'git push --force'", 'force push'],
+    ['timeout -vk 5 10 ./fetch-kernel.sh', 'installs packages'],
+    ['timeout --kill 5 10 ./fetch-kernel.sh', 'installs packages'],
+    ['ionice -tc 3 ./fetch-kernel.sh', 'installs packages'],
+    ['ionice --class 3 ./fetch-kernel.sh', 'installs packages'],
+    ['stdbuf --output L ./fetch-kernel.sh', 'installs packages'],
+    ['nice --adj 5 ./fetch-kernel.sh', 'installs packages'],
+    ['exec -a x ./fetch-kernel.sh', 'installs packages'],
+    // An attached value ends the pack (`-uXC` unsets XC), and options after
+    // a separate value are read too.
+    ['env -uXC ./fetch-kernel.sh', 'installs packages'],
+    ['env -iu X -iC sub just --evaluate', 'after a directory change'],
+    ['env --unset X -iC sub just --evaluate', 'after a directory change'],
     // the test runners name their files relative to the working directory too
     ['cd sub && node --test .claude/hooks/tests', 'after a directory change'],
     ['cd sub && npx --yes bats@1.11.1 tests/unit', 'after a directory change'],

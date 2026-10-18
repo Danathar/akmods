@@ -99,7 +99,8 @@
 //   C1  just, `node --test` and bats (also through npx) when the working
 //       directory may differ from the checkout root: `cd`, `pushd` or `popd`
 //       anywhere in the same command line (a `( cd DIR && ... )` subshell or a
-//       substitution included), or `env -C DIR`. just looks for its justfile from the
+//       substitution included, or reached through eval, a `function` body or an
+//       expanded command name such as `$X`), or `env -C DIR`. just looks for its justfile from the
 //       current directory upwards, so `cd sub && just --evaluate` evaluates
 //       sub/justfile, and `--justfile Justfile`, `node --test .claude/hooks/tests`
 //       and `bats tests/unit` name files relative to it: the pre-approved forms
@@ -1025,8 +1026,19 @@ const CHDIR = new Set(['cd', 'pushd', 'popd']);
  */
 function changesDirectory(words) {
     let k = 0;
-    while (k < words.length && (isAssignment(words[k]) || KEYWORDS.has(words[k]) || WRAPPERS.has(basename(words[k])) || words[k].startsWith('-'))) k++;
-    return k < words.length && CHDIR.has(basename(words[k]));
+    while (k < words.length) {
+        const x = words[k];
+        // `function f { cd sub; }`: the body runs in this shell when f is called.
+        if (x === 'function') k += 2;
+        else if (isAssignment(x) || KEYWORDS.has(x) || WRAPPERS.has(basename(x)) || x.startsWith('-')) k++;
+        else break;
+    }
+    if (k >= words.length) return false;
+    const cmd = words[k];
+    // eval runs its words in this shell: `eval cd sub` moves it too.
+    if (basename(cmd) === 'eval') return tokenize(words.slice(k + 1).join(' ')).some(changesDirectory);
+    // A command name the shell expands (`$X sub`, `$(echo cd) sub`) could be cd.
+    return CHDIR.has(basename(cmd)) || /[$`]/.test(cmd);
 }
 
 /** C1: a path-relative pre-approved command run after the working directory may have changed. */
@@ -1464,11 +1476,66 @@ function checkWriteCommand(cmd, args) {
 const WRAPPER_VALUE_OPTS = {
     timeout: ['-s', '--signal', '-k', '--kill-after'],
     nice: ['-n', '--adjustment'],
-    xargs: ['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--delimiter', '--arg-file'],
-    stdbuf: ['-i', '-o', '-e'],
-    ionice: ['-c', '-n', '-p', '-P', '-u'],
+    xargs: ['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--max-chars', '--delimiter', '--arg-file', '--process-slot-var'],
+    stdbuf: ['-i', '-o', '-e', '--input', '--output', '--error'],
+    ionice: ['-c', '-n', '-p', '-P', '-u', '--class', '--classdata', '--pid', '--pgid', '--uid'],
     env: ['-u', '--unset', '-C', '--chdir'],
+    exec: ['-a'],
 };
+
+// Each wrapper's options as getopt reads them: the short letters that take a
+// value, and every long name (getopt_long accepts any unambiguous prefix).
+const WRAPPER_GETOPT = {
+    env: { value: 'uCS', long: ['ignore-environment', 'null', 'unset', 'chdir', 'split-string', 'block-signal', 'default-signal', 'ignore-signal', 'list-signal-handling', 'debug'] },
+    timeout: { value: 'sk', long: ['signal', 'kill-after', 'foreground', 'preserve-status', 'verbose'] },
+    nice: { value: 'n', long: ['adjustment'] },
+    stdbuf: { value: 'ioe', long: ['input', 'output', 'error'] },
+    ionice: { value: 'cnpPu', long: ['class', 'classdata', 'pid', 'pgid', 'uid', 'ignore'] },
+    xargs: { value: 'adEILnPs', long: ['arg-file', 'delimiter', 'eof', 'replace', 'max-lines', 'max-args', 'max-procs', 'max-chars', 'process-slot-var', 'null', 'open-tty', 'interactive', 'no-run-if-empty', 'verbose', 'exit', 'show-limits'] },
+    exec: { value: 'a', long: [] },
+};
+
+/**
+ * Rewrite a wrapper's leading options into the one-option-per-word, full-name
+ * form the checks below match: `env -iu X` -> `env -i -u X`, `timeout -vk 5`
+ * -> `timeout -v -k 5`, `env --uns X` -> `env --unset X`. Otherwise the value
+ * of a packed or abbreviated option is taken for the command the wrapper runs.
+ */
+function expandWrapperOptions(cmd, w) {
+    const spec = WRAPPER_GETOPT[cmd];
+    if (!spec) return w;
+    const takesValue = WRAPPER_VALUE_OPTS[cmd] ?? [];
+    const out = [w[0]];
+    let k = 1;
+    for (; k < w.length; k++) {
+        const a = w[k];
+        if (a === '--' || a === '-' || !a.startsWith('-')) break;
+        if (a.startsWith('--')) {
+            const eq = a.indexOf('=');
+            const name = a.slice(2, eq === -1 ? undefined : eq);
+            const hits = spec.long.filter((l) => l.startsWith(name));
+            const full = `--${spec.long.includes(name) || hits.length !== 1 ? name : hits[0]}`;
+            if (eq !== -1) out.push(full + a.slice(eq));
+            else {
+                out.push(full);
+                if (takesValue.includes(full) && k + 1 < w.length) out.push(w[++k]);
+            }
+            continue;
+        }
+        for (let i = 1; i < a.length; i++) {
+            if (!spec.value.includes(a[i])) {
+                out.push(`-${a[i]}`);
+            } else if (i + 1 < a.length) {
+                out.push(`-${a[i]}${a.slice(i + 1)}`);
+                break;
+            } else {
+                out.push(`-${a[i]}`);
+                if (k + 1 < w.length) out.push(w[++k]);
+            }
+        }
+    }
+    return [...out, ...w.slice(k)];
+}
 
 /** Index of the command a wrapper (env, timeout, xargs, ...) runs, or -1 if there is none to analyse. */
 function wrapperTarget(w) {
@@ -1519,6 +1586,7 @@ function checkSegment(words, state) {
             return block(`Blocked: \`${cmd}\` (privilege escalation) is never run by agents in this repository.`);
         }
         if (!WRAPPERS.has(cmd)) break;
+        w = expandWrapperOptions(cmd, w);
         // `env -S 'gh pr create'` / `--split-string=...` runs a command string.
         // Only env's own leading options and NAME=value words are scanned; the
         // wrapped command's arguments (e.g. `--title -Sx`) are not env options.
