@@ -398,6 +398,16 @@ const blocked = [
     // a separate value are read too.
     ['env -uXC ./fetch-kernel.sh', 'installs packages'],
     ['env -iu X -iC sub just --evaluate', 'after a directory change'],
+    // xargs -e, -i and -l take an optional value: only the rest of the same
+    // word, so `-iE` is -i with replace string E, not -i plus -E taking the
+    // next word.
+    ["printf x | xargs -iE sudo id", 'privilege escalation'],
+    ['xargs -is sudo id', 'privilege escalation'],
+    ['xargs -eP git push --force', 'xargs git'],
+    ['xargs -l1 sudo id', 'privilege escalation'],
+    // A lone `-` is env's old spelling of -i, not the wrapped command.
+    ['env - git push --force', 'force push'],
+    ['env -i - sudo id', 'privilege escalation'],
     ['env --unset X -iC sub just --evaluate', 'after a directory change'],
     // the test runners name their files relative to the working directory too
     ['cd sub && node --test .claude/hooks/tests', 'after a directory change'],
