@@ -1608,7 +1608,7 @@ function checkSegment(words, state) {
                 if (isAssignment(a)) continue;
                 if (!a.startsWith('-')) break; // first word of the wrapped command
                 if (a === '-C' || a === '--chdir' || /^-C./.test(a) || a.startsWith('--chdir=')) moved = true;
-                if (['-u', '--unset', '-C', '--chdir'].includes(a)) {
+                if (['-u', '--unset', '-C', '--chdir', '-a', '--argv0'].includes(a)) {
                     k++;
                     continue;
                 }
