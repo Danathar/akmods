@@ -1479,7 +1479,7 @@ const WRAPPER_VALUE_OPTS = {
     xargs: ['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--max-chars', '--delimiter', '--arg-file', '--process-slot-var'],
     stdbuf: ['-i', '-o', '-e', '--input', '--output', '--error'],
     ionice: ['-c', '-n', '-p', '-P', '-u', '--class', '--classdata', '--pid', '--pgid', '--uid'],
-    env: ['-u', '--unset', '-C', '--chdir'],
+    env: ['-u', '--unset', '-C', '--chdir', '-a', '--argv0'],
     exec: ['-a'],
 };
 
@@ -1488,7 +1488,7 @@ const WRAPPER_VALUE_OPTS = {
 // the same word, never the next word), and every long name (getopt_long
 // accepts any unambiguous prefix).
 const WRAPPER_GETOPT = {
-    env: { value: 'uCS', long: ['ignore-environment', 'null', 'unset', 'chdir', 'split-string', 'block-signal', 'default-signal', 'ignore-signal', 'list-signal-handling', 'debug'] },
+    env: { value: 'uCSa', long: ['ignore-environment', 'null', 'unset', 'chdir', 'argv0', 'split-string', 'block-signal', 'default-signal', 'ignore-signal', 'list-signal-handling', 'debug'] },
     timeout: { value: 'sk', long: ['signal', 'kill-after', 'foreground', 'preserve-status', 'verbose'] },
     nice: { value: 'n', long: ['adjustment'] },
     stdbuf: { value: 'ioe', long: ['input', 'output', 'error'] },
