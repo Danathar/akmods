@@ -121,6 +121,9 @@ const allowed = [
     // Packed and abbreviated wrapper options still reach the command they wrap.
     'env -iu X just --evaluate',
     'env -a X ls',
+    // `time` (keyword and /usr/bin/time) runs the command after its own options.
+    'time -p git status',
+    '/usr/bin/time -o /var/tmp/t git status',
     'env --argv0=X ls',
     'timeout -v 10 just --list',
     'nice --adj 5 just --list',
@@ -386,6 +389,15 @@ const blocked = [
     ['env -iu X ./fetch-kernel.sh', 'installs packages'],
     ['env --uns X ./fetch-kernel.sh', 'installs packages'],
     ['env -iu X git push --force', 'force push'],
+    // --- time: the keyword's -p/-- and /usr/bin/time's options are skipped ---
+    ['time -p sudo id', 'sudo'],
+    ['time -- sudo id', 'sudo'],
+    ['/usr/bin/time sudo id', 'sudo'],
+    ['/usr/bin/time --out x sudo id', 'sudo'],
+    ['/usr/bin/time -po x sudo id', 'sudo'],
+    ['time -p git push --force origin main', 'force'],
+    ['/usr/bin/time -f %e git push --force origin main', 'force'],
+    ['time -p ./fetch-kernel.sh', 'installs packages'],
     ['env -iC . sudo ls', 'privilege escalation'],
     ["env -iS 'just push'", 'host-heavy recipe'],
     ["env -vS 'git push --force'", 'force push'],

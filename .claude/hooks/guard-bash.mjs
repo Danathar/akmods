@@ -191,11 +191,13 @@ const GH_OTHER_READONLY = {
 };
 
 // Words that may precede the real command and carry no meaning for us.
-const KEYWORDS = new Set(['{', '}', '!', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', 'time']);
+const KEYWORDS = new Set(['{', '}', '!', 'if', 'then', 'else', 'elif', 'do', 'while', 'until']);
 // Wrappers that run another command; we look through them for gh/git/shells.
+// `time` is here rather than in KEYWORDS: the keyword takes `-p` and `--`, and
+// /usr/bin/time takes options too, so its own options must be skipped.
 const WRAPPERS = new Set([
     'env', 'command', 'builtin', 'exec', 'nohup', 'sudo', 'nice', 'xargs',
-    'timeout', 'setsid', 'stdbuf', 'ionice', 'chronic',
+    'timeout', 'setsid', 'stdbuf', 'ionice', 'chronic', 'time',
 ]);
 const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash']);
 
@@ -1481,6 +1483,7 @@ const WRAPPER_VALUE_OPTS = {
     ionice: ['-c', '-n', '-p', '-P', '-u', '--class', '--classdata', '--pid', '--pgid', '--uid'],
     env: ['-u', '--unset', '-C', '--chdir', '-a', '--argv0'],
     exec: ['-a'],
+    time: ['-f', '--format', '-o', '--output'],
 };
 
 // Each wrapper's options as getopt reads them: the short letters that take a
@@ -1495,6 +1498,7 @@ const WRAPPER_GETOPT = {
     ionice: { value: 'cnpPu', long: ['class', 'classdata', 'pid', 'pgid', 'uid', 'ignore'] },
     xargs: { value: 'adEILnPs', optional: 'eil', long: ['arg-file', 'delimiter', 'eof', 'replace', 'max-lines', 'max-args', 'max-procs', 'max-chars', 'process-slot-var', 'null', 'open-tty', 'interactive', 'no-run-if-empty', 'verbose', 'exit', 'show-limits'] },
     exec: { value: 'a', long: [] },
+    time: { value: 'fo', long: ['format', 'output', 'append', 'portability', 'verbose', 'quiet', 'help', 'version'] },
 };
 
 /**
