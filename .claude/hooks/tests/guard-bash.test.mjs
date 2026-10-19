@@ -406,6 +406,11 @@ const blocked = [
     ['env --arg X ./fetch-kernel.sh', 'installs packages'],
     ['env -a X git push --force', 'force push'],
     ['env -a X sudo id', 'privilege escalation'],
+    // The -S scan skips -a's value too, so a -S after it is still read.
+    ["env -a X -S'sudo id'", 'privilege escalation'],
+    ["env -a X -S 'git push --force'", 'force push'],
+    ["env --argv0 X --split-string='./fetch-kernel.sh'", 'installs packages'],
+    ["env -ia X -S'./fetch-kernel.sh'", 'installs packages'],
     // An attached value ends the pack (`-uXC` unsets XC), and options after
     // a separate value are read too.
     ['env -uXC ./fetch-kernel.sh', 'installs packages'],
