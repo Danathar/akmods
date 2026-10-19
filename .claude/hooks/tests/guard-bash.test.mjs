@@ -120,6 +120,8 @@ const allowed = [
     'echo $HOME; just --evaluate',
     // Packed and abbreviated wrapper options still reach the command they wrap.
     'env -iu X just --evaluate',
+    'env -a X ls',
+    'env --argv0=X ls',
     'timeout -v 10 just --list',
     'nice --adj 5 just --list',
     // --- package-manager / container / signing reads ---
@@ -394,6 +396,16 @@ const blocked = [
     ['stdbuf --output L ./fetch-kernel.sh', 'installs packages'],
     ['nice --adj 5 ./fetch-kernel.sh', 'installs packages'],
     ['exec -a x ./fetch-kernel.sh', 'installs packages'],
+    // env -a NAME / --argv0=NAME sets the wrapped command's argv[0]; NAME is a
+    // value, not the command.
+    ['env -a X ./fetch-kernel.sh', 'installs packages'],
+    ['env -aX ./fetch-kernel.sh', 'installs packages'],
+    ['env -ia X ./fetch-kernel.sh', 'installs packages'],
+    ['env --argv0 X ./fetch-kernel.sh', 'installs packages'],
+    ['env --argv0=X ./fetch-kernel.sh', 'installs packages'],
+    ['env --arg X ./fetch-kernel.sh', 'installs packages'],
+    ['env -a X git push --force', 'force push'],
+    ['env -a X sudo id', 'privilege escalation'],
     // An attached value ends the pack (`-uXC` unsets XC), and options after
     // a separate value are read too.
     ['env -uXC ./fetch-kernel.sh', 'installs packages'],
