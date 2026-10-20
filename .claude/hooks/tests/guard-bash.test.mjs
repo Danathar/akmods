@@ -438,6 +438,18 @@ const blocked = [
     ['env - git push --force', 'force push'],
     ['env -i - sudo id', 'privilege escalation'],
     ['env --unset X -iC sub just --evaluate', 'after a directory change'],
+    // A value-taking letter keeps the rest of its word as the value even when
+    // that rest is made of option letters: `env -aiu` sets argv0 to "iu" and
+    // `env -Cmenu` changes to ./menu, so neither eats the next word.
+    ['env -aiu sudo id', 'privilege escalation'],
+    ['env -Cmenu just --evaluate', 'after a directory change'],
+    // getopt_long prefixes of env --split-string and time --format.
+    ["env --split 'sudo id'", 'privilege escalation'],
+    ['/usr/bin/time --format %e sudo id', 'sudo'],
+    ['/usr/bin/time --form %e sudo id', 'sudo'],
+    // time -f and -o take the rest of the word as their value too.
+    ['/usr/bin/time -f%o sudo id', 'sudo'],
+    ['/usr/bin/time -o/var/tmp/perf sudo id', 'sudo'],
     // the test runners name their files relative to the working directory too
     ['cd sub && node --test .claude/hooks/tests', 'after a directory change'],
     ['cd sub && npx --yes bats@1.11.1 tests/unit', 'after a directory change'],
