@@ -706,6 +706,10 @@ const blocked = [
     ['watch --int 1 sudo id', 'privilege escalation'],
     ['watch --eq 1 sudo id', 'privilege escalation'],
     ['chrt -vT 5 0 sudo id', 'privilege escalation'],
+    // chrt reads its priority with strtol: a sign or leading blanks still make the word the priority.
+    ['chrt -o +0 sudo id', 'privilege escalation'],
+    ['chrt -o -- -0 sudo id', 'privilege escalation'],
+    ["chrt -b ' 0' sudo id", 'privilege escalation'],
     ['unshare -rS 0 sudo id', 'privilege escalation'],
     ['unshare --setu 0 sudo id', 'privilege escalation'],
     ['unshare -l X sudo id', 'privilege escalation'],

@@ -1659,7 +1659,9 @@ function wrapperTarget(w) {
             operands--;
             continue;
         }
-        if (priority && /^\d+$/.test(a)) {
+        // chrt reads the priority with strtol, so leading blanks and a sign are
+        // part of it: `chrt -o +0 CMD` and `chrt -o -- -0 CMD` run CMD.
+        if (priority && /^[ \t\n\v\f\r]*[+-]?\d+$/.test(a)) {
             priority = false;
             continue;
         }
