@@ -1785,6 +1785,15 @@ function namesCheckedCommand(a) {
 }
 
 /**
+ * The word as the shell would look it up: quotes and backslashes removed. A
+ * shell drops them before it looks a name up, so `s""udo` and `su\do` inside a
+ * command string both run sudo. Removing more can only refuse more.
+ */
+function unquoted(a) {
+    return a.replace(/["'\\]/g, '');
+}
+
+/**
  * The command strings a word may hand to a shell: the word itself when it
  * holds more than one word of its own (`script -c 'sudo dnf install x'`), or a
  * value attached to an option in the same word: after the `=` of a long
@@ -1838,7 +1847,8 @@ function checkUnlistedProgram(w, inlineEnv, state) {
         if (!refusal) {
             for (const text of commandStrings(w[n])) {
                 spend();
-                if (!text.split(COMMAND_STRING_SEPARATORS).some((piece) => piece && namesCheckedCommand(piece))) continue;
+                const names = (t) => t.split(COMMAND_STRING_SEPARATORS).some((piece) => piece && namesCheckedCommand(piece));
+                if (!names(text) && !names(unquoted(text))) continue;
                 refusal = checkCommand(text, state());
                 if (refusal) break;
             }
