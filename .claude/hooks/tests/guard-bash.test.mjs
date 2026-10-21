@@ -209,6 +209,12 @@ const allowed = [
     'which sudo',
     "grep -rn 'sudo dnf install' docs",
     'setarch x86_64 less build_files/prep/build-prep.sh',
+    "printf '%s\\n' 'git push --force'",
+    "egrep 'sudo|dnf' docs",
+    "fgrep 'git push --force' docs",
+    'whereis sudo',
+    // eight checked commands behind one program is the most still read
+    `setarch x86_64 ${'git status '.repeat(8)}`,
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -745,6 +751,20 @@ const blocked = [
     ["script -qc'sudo id' /dev/null", '`script` runs a command'],
     ['script --command=\'sudo id\' /dev/null', '`script` runs a command'],
     [`setarch x86_64 ${'git status '.repeat(9)}`, 'more than 8 commands'],
+    // assignments in front of the checked command are read with it
+    ['setarch x86_64 GIT_EXTERNAL_DIFF=x git diff', '`setarch` runs a command'],
+    // a checked command named by its path
+    ['setarch x86_64 /usr/bin/sudo id', '`setarch` runs a command'],
+    // systemd-run behind such a program is looked through to the script
+    ['setarch x86_64 systemd-run --user ./fetch-kernel.sh', '`setarch` runs a command'],
+    // command strings: a one-letter cluster, a value that opens with a quote,
+    // and quotes and `;` inside the string
+    ["script -c'sudo id' /dev/null", '`script` runs a command'],
+    [`script -c'"sudo" id' /dev/null`, '`script` runs a command'],
+    [`script -qc "'sudo' id" /dev/null`, '`script` runs a command'],
+    ["script -qc 'true;sudo id' /dev/null", '`script` runs a command'],
+    // a later tail that passes does not undo an earlier refusal
+    ["script -c'sudo id; git status' /dev/null", '`script` runs a command'],
 ];
 
 for (const command of allowed) {
@@ -803,6 +823,7 @@ test('a command still being read past the budget is refused, not left to the hoo
     const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { input, encoding: 'utf8' });
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /could not finish checking the command within/);
+    assert.doesNotMatch(r.stderr, /internal error/);
 });
 
 test('an internal error fails closed (exit 2), not open', () => {
