@@ -204,6 +204,8 @@ const allowed = [
     // Behind a program this hook does not list, a command that passes alone
     // still passes, and programs that only print or look up words are not read.
     "script -qc 'g\"\"it status' /dev/null",
+    "script -qc $'git status' /dev/null",
+    "echo $'a b' $\"x\"",
     'setarch x86_64 git status',
     'strace -f git log -1',
     'prlimit node --test .claude/hooks/tests/',
@@ -755,6 +757,14 @@ const blocked = [
     ['script -qc "git push --force origin main" /dev/null', '`script` runs a command'],
     ["script -qc'sudo id' /dev/null", '`script` runs a command'],
     ['script --command=\'sudo id\' /dev/null', '`script` runs a command'],
+    // a command a string names with quotes of any kind is refused as it is
+    // when plain: `$'git'` is `git`, and `diff --no-index` is refused for it
+    ["script -qc 'git diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    ["script -qc 'g\"\"it diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    ["script -qc 'gi\\t diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    ['script -qc "$\'git\' diff --no-index /dev/null .env" /dev/null', '`script` runs a command'],
+    ["script -qc $'sudo id' /dev/null", '`script` runs a command'],
+    ["$'sudo' id", 'privilege escalation'],
     [`setarch x86_64 ${'git status '.repeat(9)}`, 'more than 8 commands'],
     // assignments in front of the checked command are read with it
     ['setarch x86_64 GIT_EXTERNAL_DIFF=x git diff', '`setarch` runs a command'],
