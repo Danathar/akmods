@@ -129,7 +129,8 @@
 // a program that runs it look alike. A command name is read as the shell
 // builds it: `$'...'` escapes are decoded (`$'\x67it'` is git), a brace group
 // that can expand to a checked command (`{git,}`) is refused, and a wildcard
-// in a path (`/usr/bin/g?t`) is read as the checked program it matches. Read-only gh
+// (`/usr/bin/g?t`, or `g?t` beside a file named git) is read as the checked
+// program it matches; a command name made only of wildcards (`*`) is refused. Read-only gh
 // commands (view, list, status, diff, checks, api GET, ...) are always
 // allowed. The command is split into segments on && || ; | & newlines,
 // subshells and command substitutions; shell -c, eval, watch and
@@ -1155,8 +1156,12 @@ function changesDirectory(words) {
     const cmd = words[k];
     // eval runs its words in this shell: `eval cd sub` moves it too.
     if (basename(cmd) === 'eval') return tokenize(words.slice(k + 1).join(' ')).some(changesDirectory);
-    // A command name the shell expands (`$X sub`, `$(echo cd) sub`, `{cd,} sub`) could be cd.
-    return CHDIR.has(basename(cmd)) || /[$`]/.test(cmd) || (BRACE_GROUP.test(cmd) && (braceForms(cmd) ?? ['cd']).some((f) => CHDIR.has(basename(f))));
+    // A command name the shell expands (`$X sub`, `$(echo cd) sub`, `{cd,} sub`,
+    // `c? sub` beside a file named cd) could be cd.
+    if (CHDIR.has(basename(cmd)) || /[$`]/.test(cmd)) return true;
+    const forms = BRACE_GROUP.test(cmd) ? braceForms(cmd) : [cmd];
+    if (forms === null) return true;
+    return forms.some((f) => [...CHDIR].some((d) => basename(f) === d || (GLOB.test(basename(f)) && globMatches(basename(f), d))));
 }
 
 /** C1: a path-relative pre-approved command run after the working directory may have changed. */
@@ -1847,9 +1852,10 @@ const CHECKED_NAMES = new Set([...LOOKTHROUGH, 'systemd-run']);
 
 // A command name the shell builds before it looks it up (#171). Bash expands
 // a word's brace groups (`{git,}` is `git`, `g{i,x}t` is `git gxt`), and
-// matches a word holding a `/` and a wildcard against the filesystem
-// (`/usr/bin/g?t` is `/usr/bin/git`), so the word as typed is not the program
-// that runs. A word with more brace forms than this is not expanded: it is
+// matches a word holding a wildcard against the filesystem (`/usr/bin/g?t` is
+// `/usr/bin/git`; `g?t` is `git` once a file named git sits in the working
+// directory, and bash then finds git on the PATH), so the word as typed is not
+// the program that runs. A word with more brace forms than this is not expanded: it is
 // read as though it could name any checked command.
 const MAX_BRACE_FORMS = 32;
 const BRACE_GROUP = /\{([^{}]*,[^{}]*)\}/;
@@ -1897,14 +1903,16 @@ function globMatches(pattern, name) {
  * How the shell could build a checked command name out of a word it would
  * run, when the word is not that name spelled out: { braces: true } when its
  * brace groups can expand to one (or have too many forms to read), or
- * { globs: [names] } when it holds a `/` and a wildcard that may match them.
- * A glob with no `/` matches files in the working directory, not a program
- * on the PATH, and one made only of `*` and `?` (`docs/*`) picks no program
- * out: it runs whichever file sorts first. Otherwise null. Quotes are gone
- * from the words by now, so a quoted `{` or `*` reads as an unquoted one,
- * which can only refuse more.
+ * { globs: [names] } when it holds a wildcard that may match them, with or
+ * without a `/`: a file named git in the working directory makes `g?t` run
+ * the git on the PATH. A name made only of `*` and `?` (`*`, `???`) can match
+ * any program, so it is read as every checked name it fits when `commandWord`
+ * says the shell runs the word; a later word made only of wildcards (`ls *`)
+ * is left alone, since reading it as each checked program would refuse every
+ * such listing. Otherwise null. Quotes are gone from the words by now, so a
+ * quoted `{` or `*` reads as an unquoted one, which can only refuse more.
  */
-function builtCommandName(word) {
+function builtCommandName(word, commandWord = false) {
     if (!/[{}*?[]/.test(word)) return null;
     const forms = BRACE_GROUP.test(word) ? braceForms(word) : [word];
     if (forms === null) return { braces: true };
@@ -1913,7 +1921,7 @@ function builtCommandName(word) {
         if (/\s/.test(form)) continue; // a word with a blank in it names no program
         const name = basename(form);
         if (CHECKED_NAMES.has(name) && form !== word) return { braces: true };
-        if (!form.includes('/') || !GLOB.test(name) || /^[*?]+$/.test(name)) continue;
+        if (!GLOB.test(name) || (!commandWord && /^[*?]+$/.test(name))) continue;
         for (const checked of CHECKED_NAMES) if (globMatches(name, checked)) globs.add(checked);
     }
     if (!globs.size) return null;
@@ -1995,8 +2003,16 @@ function checkUnlistedProgram(w, inlineEnv, state) {
             for (const text of commandStrings(w[n])) {
                 spend();
                 const names = (t) => t.split(COMMAND_STRING_SEPARATORS).some((piece) => piece && namesCheckedCommand(piece));
-                // Tokenized too, so `$'\x67it'` is read as the `git` it decodes to.
-                if (!names(text) && !names(unquoted(text)) && !tokenize(text).flat().some(namesCheckedCommand)) continue;
+                // Tokenized too, so `$'\x67it'` is read as the `git` it decodes to,
+                // and the first word of each command in it as one the shell runs (`* push`).
+                const segments = tokenize(text);
+                if (
+                    !names(text) &&
+                    !names(unquoted(text)) &&
+                    !segments.flat().some(namesCheckedCommand) &&
+                    !segments.some((seg) => seg.length && builtCommandName(seg[0], true) !== null)
+                )
+                    continue;
                 refusal = checkCommand(text, state());
                 if (refusal) break;
             }
@@ -2040,9 +2056,10 @@ function checkSegment(words, state) {
         }
         if (!w.length) return null;
         // A name the shell builds (#171): braces are refused, since the words
-        // they add are not modelled here; a glob in a path is read as the one
-        // checked program it can match, so `/usr/bin/g?t diff` is `git diff`.
-        const built = builtCommandName(w[0]);
+        // they add are not modelled here; a wildcard is read as the one
+        // checked program it can match, so `/usr/bin/g?t diff` and `g?t diff`
+        // are `git diff`.
+        const built = builtCommandName(w[0], true);
         if (built?.braces || built?.globs.length > 1) {
             return block(
                 `Blocked: \`${w[0]}\` is a command name the shell expands (brace groups, or a wildcard in a path) ` +
