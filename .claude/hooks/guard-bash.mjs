@@ -126,7 +126,10 @@
 // `script -qc '...'`), each later word naming a command this hook checks, and
 // each command string a word carries, is checked as though it stood alone; a
 // host-modifying script named there is not, since `less fetch-kernel.sh` and
-// a program that runs it look alike. Read-only gh
+// a program that runs it look alike. A command name is read as the shell
+// builds it: `$'...'` escapes are decoded (`$'\x67it'` is git), a brace group
+// that can expand to a checked command (`{git,}`) is refused, and a wildcard
+// in a path (`/usr/bin/g?t`) is read as the checked program it matches. Read-only gh
 // commands (view, list, status, diff, checks, api GET, ...) are always
 // allowed. The command is split into segments on && || ; | & newlines,
 // subshells and command substitutions; shell -c, eval, watch and
@@ -403,9 +406,14 @@ export function tokenize(input) {
         } else if (c === '$' && input[i + 1] === '(') {
             append('$()');
             i = closeParen(input, i + 2);
-        } else if (c === '$' && (input[i + 1] === "'" || input[i + 1] === '"')) {
-            // `$'git'` and `$"git"` quote like `'git'` and `"git"`: the shell
-            // drops the `$`, so the word is `git`, not `$git`.
+        } else if (c === '$' && input[i + 1] === "'") {
+            // `$'git'` (ANSI-C quoting): the shell drops the `$` and decodes the
+            // escapes, so `$'\x67it'` is `git` and `$'it\'s'` is one word.
+            const { text, next } = readAnsiC(input, i + 2);
+            append(text);
+            i = next;
+        } else if (c === '$' && input[i + 1] === '"') {
+            // `$"git"` (locale quoting) quotes like `"git"`: the word is `git`, not `$git`.
             i++;
         } else {
             append(c);
@@ -414,6 +422,55 @@ export function tokenize(input) {
     }
     endSegment();
     return segments;
+}
+
+// One-letter escapes of `$'...'` and the characters they stand for.
+const ANSI_C_ESCAPES = { a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v', '\\': '\\', "'": "'", '"': '"', '?': '?' };
+// Numeric escapes of `$'...'`: what each reads after the `\`, the base, and how many letters lead the digits.
+const ANSI_C_NUMERIC = [
+    [/^[0-7]{1,3}/, 8, 0],
+    [/^x[0-9a-fA-F]{1,2}/, 16, 1],
+    [/^u[0-9a-fA-F]{1,4}/, 16, 1],
+    [/^U[0-9a-fA-F]{1,8}/, 16, 1],
+];
+
+/**
+ * Decode the body of a `$'...'` string starting at input[i] (just past the
+ * opening quote) the way bash does: `\xHH`, `\NNN`, `\uHHHH`, `\UHHHHHHHH`,
+ * `\cX` and the one-letter escapes. A NUL ends the text, as it does in bash.
+ * Returns { text, next } (next = index after the closing quote).
+ */
+function readAnsiC(input, i) {
+    let text = '';
+    let ended = false;
+    const add = (s) => {
+        if (s === '\0') ended = true;
+        if (!ended) text += s;
+    };
+    while (i < input.length && input[i] !== "'") {
+        if (input[i] !== '\\' || i + 1 >= input.length) {
+            add(input[i++]);
+            continue;
+        }
+        const rest = input.slice(i + 1, i + 10);
+        const numeric = ANSI_C_NUMERIC.map(([re, base, skip]) => [re.exec(rest), base, skip]).find(([m]) => m);
+        if (numeric) {
+            const [[escape], base, skip] = numeric;
+            const code = parseInt(escape.slice(skip), base);
+            add(code <= 0x10ffff ? String.fromCodePoint(base === 8 ? code & 0xff : code) : `\\${escape}`);
+            i += 1 + escape.length;
+        } else if (rest[0] === 'c' && rest.length > 1) {
+            add(String.fromCharCode(rest.charCodeAt(1) & 0x1f));
+            i += 3;
+        } else if (Object.hasOwn(ANSI_C_ESCAPES, rest[0])) {
+            add(ANSI_C_ESCAPES[rest[0]]);
+            i += 2;
+        } else {
+            add(`\\${rest[0]}`);
+            i += 2;
+        }
+    }
+    return { text, next: i + 1 };
 }
 
 /**
@@ -429,6 +486,9 @@ export function extractSubstitutions(input) {
         const c = input[i];
         if (c === '\\' && !inSingle) {
             i++;
+        } else if (c === '$' && input[i + 1] === "'" && !inSingle && !inDouble) {
+            // `$'...'` holds no substitution, and `\'` does not end it.
+            i = readAnsiC(input, i + 2).next - 1;
         } else if (c === "'" && !inDouble) {
             inSingle = !inSingle;
         } else if (c === '"' && !inSingle) {
@@ -1095,8 +1155,8 @@ function changesDirectory(words) {
     const cmd = words[k];
     // eval runs its words in this shell: `eval cd sub` moves it too.
     if (basename(cmd) === 'eval') return tokenize(words.slice(k + 1).join(' ')).some(changesDirectory);
-    // A command name the shell expands (`$X sub`, `$(echo cd) sub`) could be cd.
-    return CHDIR.has(basename(cmd)) || /[$`]/.test(cmd);
+    // A command name the shell expands (`$X sub`, `$(echo cd) sub`, `{cd,} sub`) could be cd.
+    return CHDIR.has(basename(cmd)) || /[$`]/.test(cmd) || (BRACE_GROUP.test(cmd) && (braceForms(cmd) ?? ['cd']).some((f) => CHDIR.has(basename(f))));
 }
 
 /** C1: a path-relative pre-approved command run after the working directory may have changed. */
@@ -1782,10 +1842,87 @@ function fishScripts(args) {
     return scripts;
 }
 
-/** Whether this word names a command checkSegment() checks or looks through. */
+// Every name checkSegment() checks or looks through.
+const CHECKED_NAMES = new Set([...LOOKTHROUGH, 'systemd-run']);
+
+// A command name the shell builds before it looks it up (#171). Bash expands
+// a word's brace groups (`{git,}` is `git`, `g{i,x}t` is `git gxt`), and
+// matches a word holding a `/` and a wildcard against the filesystem
+// (`/usr/bin/g?t` is `/usr/bin/git`), so the word as typed is not the program
+// that runs. A word with more brace forms than this is not expanded: it is
+// read as though it could name any checked command.
+const MAX_BRACE_FORMS = 32;
+const BRACE_GROUP = /\{([^{}]*,[^{}]*)\}/;
+const GLOB = /[*?[]/;
+
+/** Every word brace expansion could make of `word`, or null past MAX_BRACE_FORMS. */
+function braceForms(word) {
+    const forms = [word];
+    const pending = [word];
+    while (pending.length) {
+        const form = pending.pop();
+        const group = BRACE_GROUP.exec(form);
+        if (!group) continue;
+        for (const alternative of group[1].split(',')) {
+            const expanded = form.slice(0, group.index) + alternative + form.slice(group.index + group[0].length);
+            if (forms.push(expanded) > MAX_BRACE_FORMS) return null;
+            pending.push(expanded);
+        }
+    }
+    return forms;
+}
+
+/** Whether the glob `pattern` (`*`, `?`, `[...]`) matches all of `name`. */
+function globMatches(pattern, name) {
+    let re = '';
+    for (let i = 0; i < pattern.length; i++) {
+        const c = pattern[i];
+        const close = c === '[' ? pattern.indexOf(']', i + 2) : -1;
+        if (c === '*') re += '.*';
+        else if (c === '?') re += '.';
+        else if (close !== -1) {
+            const set = pattern.slice(i + 1, close).replace(/^[!^]/, '^').replace(/[\\\]]/g, '\\$&');
+            re += `[${set}]`;
+            i = close;
+        } else re += c.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+    }
+    try {
+        return new RegExp(`^${re}$`).test(name);
+    } catch {
+        return true; // a bracket expression we cannot read could match anything
+    }
+}
+
+/**
+ * How the shell could build a checked command name out of a word it would
+ * run, when the word is not that name spelled out: { braces: true } when its
+ * brace groups can expand to one (or have too many forms to read), or
+ * { globs: [names] } when it holds a `/` and a wildcard that may match them.
+ * A glob with no `/` matches files in the working directory, not a program
+ * on the PATH, and one made only of `*` and `?` (`docs/*`) picks no program
+ * out: it runs whichever file sorts first. Otherwise null. Quotes are gone
+ * from the words by now, so a quoted `{` or `*` reads as an unquoted one,
+ * which can only refuse more.
+ */
+function builtCommandName(word) {
+    if (!/[{}*?[]/.test(word)) return null;
+    const forms = BRACE_GROUP.test(word) ? braceForms(word) : [word];
+    if (forms === null) return { braces: true };
+    const globs = new Set();
+    for (const form of forms) {
+        if (/\s/.test(form)) continue; // a word with a blank in it names no program
+        const name = basename(form);
+        if (CHECKED_NAMES.has(name) && form !== word) return { braces: true };
+        if (!form.includes('/') || !GLOB.test(name) || /^[*?]+$/.test(name)) continue;
+        for (const checked of CHECKED_NAMES) if (globMatches(name, checked)) globs.add(checked);
+    }
+    if (!globs.size) return null;
+    return forms.length > 1 ? { braces: true } : { globs: [...globs] };
+}
+
+/** Whether this word names a command checkSegment() checks or looks through, also once the shell has expanded it. */
 function namesCheckedCommand(a) {
-    const name = basename(a);
-    return LOOKTHROUGH.has(name) || name === 'systemd-run';
+    return CHECKED_NAMES.has(basename(a)) || builtCommandName(a) !== null;
 }
 
 /**
@@ -1847,13 +1984,19 @@ function checkUnlistedProgram(w, inlineEnv, state) {
             }
             let start = n;
             while (start > 1 && isAssignment(w[start - 1])) start--;
-            refusal = checkSegment([...env, ...w.slice(start)], state());
+            // A glob in a path is read as each checked program it may match:
+            // `ls /usr/bin/g*` passes as `gh` and `git` alone do.
+            for (const name of builtCommandName(w[n])?.globs ?? [w[n]]) {
+                refusal = checkSegment([...env, ...w.slice(start, n), name, ...w.slice(n + 1)], state());
+                if (refusal) break;
+            }
         }
         if (!refusal) {
             for (const text of commandStrings(w[n])) {
                 spend();
                 const names = (t) => t.split(COMMAND_STRING_SEPARATORS).some((piece) => piece && namesCheckedCommand(piece));
-                if (!names(text) && !names(unquoted(text))) continue;
+                // Tokenized too, so `$'\x67it'` is read as the `git` it decodes to.
+                if (!names(text) && !names(unquoted(text)) && !tokenize(text).flat().some(namesCheckedCommand)) continue;
                 refusal = checkCommand(text, state());
                 if (refusal) break;
             }
@@ -1896,6 +2039,18 @@ function checkSegment(words, state) {
             w.shift();
         }
         if (!w.length) return null;
+        // A name the shell builds (#171): braces are refused, since the words
+        // they add are not modelled here; a glob in a path is read as the one
+        // checked program it can match, so `/usr/bin/g?t diff` is `git diff`.
+        const built = builtCommandName(w[0]);
+        if (built?.braces || built?.globs.length > 1) {
+            return block(
+                `Blocked: \`${w[0]}\` is a command name the shell expands (brace groups, or a wildcard in a path) ` +
+                    'before it runs it, and it can expand to a command this hook checks only when the name is ' +
+                    'spelled out. Spell the command name out.'
+            );
+        }
+        if (built) w = [built.globs[0], ...w.slice(1)];
         const cmd = basename(w[0]);
         if (PRIVILEGE.has(cmd)) {
             return block(`Blocked: \`${cmd}\` (privilege escalation) is never run by agents in this repository.`);

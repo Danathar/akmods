@@ -218,6 +218,20 @@ const allowed = [
     'whereis sudo',
     // eight checked commands behind one program is the most still read
     `setarch x86_64 ${'git status '.repeat(8)}`,
+    // A command name the shell builds passes when the command it builds
+    // passes, and braces, wildcards and `$'...'` that build no checked name
+    // are left alone (#171).
+    '/usr/bin/g?t status',
+    'setarch x86_64 /usr/bin/g?t status',
+    'ls /usr/bin/g*',
+    'ls build_files/*',
+    'cat {a,b}.txt',
+    "sh -c 'cp {a,b}.py /tmp'",
+    "find . -name '*' -print",
+    "awk -F: '$1 == \"root\" {print $7}' /etc/passwd",
+    "awk '{print $1,$2}' build/cache.json",
+    "echo $'a\\tb'",
+    "git log --format=$'%h\\t%s' -3",
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -780,6 +794,34 @@ const blocked = [
     ["script -qc 'true;sudo id' /dev/null", '`script` runs a command'],
     // a later tail that passes does not undo an earlier refusal
     ["script -c'sudo id; git status' /dev/null", '`script` runs a command'],
+    // --- a command name the shell builds before it looks it up (#171): brace
+    // groups, a wildcard in a path, and `$'...'` / `$"..."` quoting with escapes ---
+    ['{git,} diff --no-index /dev/null .env', 'spell the command name out'],
+    ['setarch x86_64 {git,} diff --no-index /dev/null .env', '`setarch` runs a command'],
+    ['g{i,x}t diff --no-index /dev/null .env', 'spell the command name out'],
+    ['{git,diff} --no-index /dev/null .env', 'spell the command name out'],
+    ['{sudo,} id', 'spell the command name out'],
+    ['/usr/bin/g?t diff --no-index /dev/null .env', '--no-index'],
+    ['setarch x86_64 /usr/bin/g?t diff --no-index /dev/null .env', '`setarch` runs a command'],
+    ['timeout 5 /usr/bin/g?t diff --no-index /dev/null .env', '--no-index'],
+    ['/usr/bin/s?do id', 'privilege escalation'],
+    ['/usr/bin/[s]udo id', 'privilege escalation'],
+    // a wildcard that matches more than one checked program
+    ['/usr/bin/g* status', 'spell the command name out'],
+    ["$'git' diff --no-index /dev/null .env", '--no-index'],
+    ['$"git" diff --no-index /dev/null .env', '--no-index'],
+    ["$'\\x67it' diff --no-index /dev/null .env", '--no-index'],
+    ["$'\\147it' diff --no-index /dev/null .env", '--no-index'],
+    ["$'\\u0067it' diff --no-index /dev/null .env", '--no-index'],
+    ["setarch x86_64 $'\\x67it' diff --no-index /dev/null .env", '`setarch` runs a command'],
+    [`script -qc "$'\\x67it' diff --no-index /dev/null .env" /dev/null`, '`script` runs a command'],
+    ["script -qc 'g{,}it diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    ["script -qc '/usr/bin/g?t diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    // `\'` does not end a `$'...'` string, so what follows it is still read
+    ["echo $'it\\'s' && sudo id", 'privilege escalation'],
+    ["echo $'\\'' $(sudo id)", 'privilege escalation'],
+    // C1: braces can build cd too
+    ['{cd,} sub && just --evaluate', 'directory change'],
 ];
 
 for (const command of allowed) {
