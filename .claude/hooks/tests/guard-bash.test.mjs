@@ -225,6 +225,17 @@ const allowed = [
     'setarch x86_64 /usr/bin/g?t status',
     'ls /usr/bin/g*',
     'ls build_files/*',
+    // a wildcard with no `/` builds a checked name the same way, and a later
+    // word made only of wildcards is a listing, not a program
+    'g?t status',
+    'ls g?t',
+    'ls *',
+    'cat ???',
+    'cp *.txt /tmp',
+    'setarch x86_64 ls *',
+    'setarch x86_64 ls g?t',
+    '[ -f x ]',
+    '[[ -f x ]]',
     'cat {a,b}.txt',
     "sh -c 'cp {a,b}.py /tmp'",
     "find . -name '*' -print",
@@ -808,6 +819,22 @@ const blocked = [
     ['/usr/bin/[s]udo id', 'privilege escalation'],
     // a wildcard that matches more than one checked program
     ['/usr/bin/g* status', 'spell the command name out'],
+    // a wildcard with no `/` matches a file in the working directory, and bash
+    // then runs the program of that name from the PATH (`touch git; g?t ...`)
+    ['g?t push --force', 'force'],
+    ['touch git; g?t push --force', 'force'],
+    ['g[i]t push -f', 'force'],
+    ['su?o id', 'privilege escalation'],
+    ['nice g?t push --force', 'force'],
+    ['timeout 5 g?t diff --no-index /dev/null .env', '--no-index'],
+    ['env g?t push --force', 'force'],
+    ['setarch x86_64 g?t push --force', '`setarch` runs a command'],
+    ["sh -c 'g?t push --force'", 'force'],
+    ["script -qc 'g?t push --force' /dev/null", '`script` runs a command'],
+    // a command name made only of wildcards can be any program
+    ['* push --force', 'spell the command name out'],
+    ['??? push --force', 'spell the command name out'],
+    ["script -qc '* push --force' /dev/null", '`script` runs a command'],
     ["$'git' diff --no-index /dev/null .env", '--no-index'],
     ['$"git" diff --no-index /dev/null .env', '--no-index'],
     ["$'\\x67it' diff --no-index /dev/null .env", '--no-index'],
@@ -822,6 +849,9 @@ const blocked = [
     ["echo $'\\'' $(sudo id)", 'privilege escalation'],
     // C1: braces can build cd too
     ['{cd,} sub && just --evaluate', 'directory change'],
+    // and so can a wildcard, beside a file named cd
+    ['c? sub && just --evaluate', 'directory change'],
+    ['p?shd sub && just --evaluate', 'directory change'],
 ];
 
 for (const command of allowed) {
