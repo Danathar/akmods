@@ -403,6 +403,10 @@ export function tokenize(input) {
         } else if (c === '$' && input[i + 1] === '(') {
             append('$()');
             i = closeParen(input, i + 2);
+        } else if (c === '$' && (input[i + 1] === "'" || input[i + 1] === '"')) {
+            // `$'git'` and `$"git"` quote like `'git'` and `"git"`: the shell
+            // drops the `$`, so the word is `git`, not `$git`.
+            i++;
         } else {
             append(c);
             i++;
@@ -1785,12 +1789,13 @@ function namesCheckedCommand(a) {
 }
 
 /**
- * The word as the shell would look it up: quotes and backslashes removed. A
- * shell drops them before it looks a name up, so `s""udo` and `su\do` inside a
- * command string both run sudo. Removing more can only refuse more.
+ * The word as the shell would look it up: quotes, backslashes and the `$` of
+ * `$'...'` removed. A shell drops them before it looks a name up, so `s""udo`,
+ * `su\do` and `$'sudo'` inside a command string all run sudo. Removing more
+ * can only refuse more.
  */
 function unquoted(a) {
-    return a.replace(/["'\\]/g, '');
+    return a.replace(/[$"'\\]/g, '');
 }
 
 /**
