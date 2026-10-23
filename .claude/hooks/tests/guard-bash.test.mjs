@@ -940,7 +940,7 @@ test('globMatches reads * ? and bracket expressions as the shell does, in linear
     assert.equal(globMatches('git', 'gi'), false);
     assert.equal(globMatches('g[a-j]t', 'git'), true);
     assert.equal(globMatches('g[k-z]t', 'git'), false);
-    assert.equal(globMatches('g[!a-h]t', 'git'), false);
+    assert.equal(globMatches('g[!h-j]t', 'git'), false);
     assert.equal(globMatches('g[^a-h]t', 'git'), true);
     assert.equal(globMatches('[]x]', ']'), true);
     assert.equal(globMatches('g[i', 'g[i'), true); // an unclosed [ is a literal
