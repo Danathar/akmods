@@ -770,25 +770,66 @@ export function braceForms(word) {
     return forms;
 }
 
-/** Whether the glob `pattern` (`*`, `?`, `[...]`) matches all of `name`. */
+/**
+ * Whether the glob `pattern` (`*`, `?`, `[...]`) matches all of `name`. The
+ * match runs in time linear in the two lengths, so a word cannot stall the hook
+ * past its timeout (Claude Code runs the command when the hook times out): a
+ * pattern of many `*` compiled to a regexp (`.*.*.*…`) backtracks exponentially
+ * against a name it does not fit. This is the classic single-star-pointer
+ * match: on a mismatch it falls back only to the latest `*`, never to an
+ * earlier one.
+ */
 export function globMatches(pattern, name) {
-    let re = '';
+    const tokens = [];
+    const lastClose = pattern.lastIndexOf(']');
     for (let i = 0; i < pattern.length; i++) {
         const c = pattern[i];
-        const close = c === '[' ? pattern.indexOf(']', i + 2) : -1;
-        if (c === '*') re += '.*';
-        else if (c === '?') re += '.';
+        const close = c === '[' && lastClose >= i + 2 ? pattern.indexOf(']', i + 2) : -1;
+        if (c === '*') {
+            if (tokens.length === 0 || tokens[tokens.length - 1].kind !== 'star') tokens.push({ kind: 'star' });
+        } else if (c === '?') tokens.push({ kind: 'any' });
         else if (close !== -1) {
-            const set = pattern.slice(i + 1, close).replace(/^[!^]/, '^').replace(/[\\\]]/g, '\\$&');
-            re += `[${set}]`;
+            // A bracket expression holds at least one character (a leading `]` is
+            // part of the set), then runs to the first `]` after it.
+            const body = pattern.slice(i + 1, close);
+            const negate = body[0] === '!' || body[0] === '^';
+            const set = negate ? body.slice(1) : body;
+            const ranges = [];
+            for (let j = 0; j < set.length; j++) {
+                const isRange = j + 2 < set.length && set[j + 1] === '-';
+                const hi = isRange ? set[j + 2] : set[j];
+                if (set[j] > hi) return true; // a range we cannot read could match anything
+                ranges.push([set[j], hi]);
+                if (isRange) j += 2;
+            }
+            tokens.push({ kind: 'set', negate, ranges });
             i = close;
-        } else re += c.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+        } else tokens.push({ kind: 'char', c });
     }
-    try {
-        return new RegExp(`^${re}$`).test(name);
-    } catch {
-        return true; // a bracket expression we cannot read could match anything
+    const fits = (token, ch) =>
+        token.kind === 'any' ||
+        (token.kind === 'char' && token.c === ch) ||
+        (token.kind === 'set' && token.ranges.some(([lo, hi]) => lo <= ch && ch <= hi) !== token.negate);
+    let p = 0;
+    let t = 0;
+    let star = -1;
+    let mark = 0;
+    while (t < name.length) {
+        const token = tokens[p];
+        if (token && token.kind === 'star') {
+            star = p;
+            mark = t;
+            p++;
+        } else if (token && fits(token, name[t])) {
+            p++;
+            t++;
+        } else if (star !== -1) {
+            p = star + 1;
+            t = ++mark;
+        } else return false;
     }
+    while (p < tokens.length && tokens[p].kind === 'star') p++;
+    return p === tokens.length;
 }
 
 /**

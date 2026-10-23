@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { globMatches } from '../shell-reader.mjs';
 
 const HOOK = fileURLToPath(new URL('../guard-bash.mjs', import.meta.url));
 
@@ -911,6 +912,44 @@ test('a command still being read past the budget is refused, not left to the hoo
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /could not finish checking the command within/);
     assert.doesNotMatch(r.stderr, /internal error/);
+});
+
+test('a word of many wildcards cannot stall the hook into a timeout, so a command behind it is still refused (#183)', () => {
+    // A `*`-heavy word compiled to a regexp (`.*.*.*…`) backtracks
+    // exponentially against a non-matching name, inside a single uncancellable
+    // `.test()` the budget check cannot interrupt — so the hook runs past its
+    // timeout and Claude Code runs the command. Here the stalling word is first,
+    // and a blocked `git push --force` follows it.
+    const command = `${'*'.repeat(64)}Z; git push --force origin main`;
+    const input = JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+    const r = spawnSync(process.execPath, [HOOK], { input, encoding: 'utf8', timeout: 10000 });
+    assert.equal(r.signal, null, 'hook timed out: glob matching still backtracks');
+    assert.equal(r.status, 2, r.stderr);
+});
+
+test('globMatches reads * ? and bracket expressions as the shell does, in linear time', () => {
+    assert.equal(globMatches('g?t', 'git'), true);
+    assert.equal(globMatches('g?t', 'gt'), false);
+    assert.equal(globMatches('*', ''), true);
+    assert.equal(globMatches('g*', 'git'), true);
+    assert.equal(globMatches('*t', 'git'), true);
+    assert.equal(globMatches('g*i*t', 'gitit'), true);
+    assert.equal(globMatches('*it*', 'git'), true);
+    assert.equal(globMatches('*s', 'git'), false);
+    assert.equal(globMatches('gi', 'git'), false);
+    assert.equal(globMatches('git', 'gi'), false);
+    assert.equal(globMatches('g[a-j]t', 'git'), true);
+    assert.equal(globMatches('g[k-z]t', 'git'), false);
+    assert.equal(globMatches('g[!a-h]t', 'git'), false);
+    assert.equal(globMatches('g[^a-h]t', 'git'), true);
+    assert.equal(globMatches('[]x]', ']'), true);
+    assert.equal(globMatches('g[i', 'g[i'), true); // an unclosed [ is a literal
+    assert.equal(globMatches('g[i', 'git'), false);
+    assert.equal(globMatches('g[z-a]t', 'xyz'), true); // a bracket we cannot read could match anything
+    const started = Date.now();
+    assert.equal(globMatches(`${'*'.repeat(64)}Z`, 'a'.repeat(64)), false);
+    assert.equal(globMatches(`${'a*'.repeat(30)}b`, 'a'.repeat(200)), false);
+    assert.ok(Date.now() - started < 1000, 'glob matching is not linear');
 });
 
 test('an internal error fails closed (exit 2), not open', () => {
