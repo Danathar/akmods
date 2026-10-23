@@ -47,7 +47,8 @@
 //       remote a push URL other than DISABLE, or touch url.*/credential.*.
 //   T3  git options that write a file, read outside the repository or run a
 //       program on the pre-approved read commands (--output, --no-index,
-//       --ext-diff, git grep -O, --exec-path, `-c diff.external=` ...);
+//       --ext-diff, git grep -O, any unambiguous prefix of these such as
+//       --out, --exec-path, `-c diff.external=` ...);
 //       --upload-pack (and its abbreviations such as --upl), --exec and
 //       clone/ls-remote -u on git fetch|pull|clone|ls-remote|archive, which
 //       run the named program; `-c protocol.*` (protocol.ext.allow=always);
@@ -128,9 +129,11 @@
 // host-modifying script named there is not, since `less fetch-kernel.sh` and
 // a program that runs it look alike. A command name is read as the shell
 // builds it: `$'...'` escapes are decoded (`$'\x67it'` is git), a brace group
-// that can expand to a checked command (`{git,}`) is refused, and a wildcard
-// (`/usr/bin/g?t`, or `g?t` beside a file named git) is read as the checked
-// program it matches; a command name made only of wildcards (`*`) is refused. Read-only gh
+// or sequence that can expand to a checked command (`{git,}`, `{g..g}it`) is
+// refused, and a wildcard (`/usr/bin/g?t`, `[[:alpha:]]it`, an extended glob
+// group such as `g@(i)t`, or `g?t` beside a file named git) is read as the checked
+// program it matches; a command name made only of wildcards (`*`) is refused.
+// `NAME+=value` in front of a command is read as an assignment. Read-only gh
 // commands (view, list, status, diff, checks, api GET, ...) are always
 // allowed. The command is split into segments on && || ; | & newlines,
 // subshells and command substitutions; shell -c, eval, watch and
@@ -1375,18 +1378,26 @@ function checkSegment(words, state) {
     if (cmd === 'export' || ((cmd === 'declare' || cmd === 'typeset') && args.some((a) => /^-[a-zA-Z]*x/.test(a)))) {
         for (const a of args) {
             if (a.startsWith('GH_REPO=')) state.exportedGhRepo = a.slice(8);
+            if (a.startsWith('GH_REPO+=')) state.exportedGhRepo = (state.exportedGhRepo ?? '') + a.slice(9);
             // (PATH is not tracked: this repository has no stub exemption.)
             // `export NAME` without a value exports an earlier assignment: value unknown (null).
             const eq = a.indexOf('=');
+            // `export NAME+=value` appends: it is kept as `NAME+`, which riskyEnv() reads as NAME.
             const name = eq === -1 ? a : a.slice(0, eq);
-            if (/^(GIT_CONFIG_|GIT_SSH)/i.test(name) || WATCHED_ENV.test(name) || JUST_ENV.test(name)) {
+            const watched = name.replace(/\+$/, '');
+            if (/^(GIT_CONFIG_|GIT_SSH)/i.test(watched) || WATCHED_ENV.test(watched) || JUST_ENV.test(watched)) {
                 (state.exportedEnv ??= {})[name] = eq === -1 ? null : a.slice(eq + 1);
             }
         }
         return null;
     }
     if (cmd === 'gh') {
-        const envRepo = inlineEnv.GH_REPO ?? state.exportedGhRepo ?? null;
+        // `GH_REPO+=-x gh ...` appends to the repository gh would otherwise use.
+        const appended = inlineEnv['GH_REPO+'];
+        const envRepo =
+            appended === undefined
+                ? (inlineEnv.GH_REPO ?? state.exportedGhRepo ?? null)
+                : `${inlineEnv.GH_REPO ?? state.exportedGhRepo ?? ''}${appended}`;
         return checkGh(args, envRepo);
     }
     if (cmd === 'git') return checkGit(args, inlineEnv, state.exportedEnv ?? {});

@@ -3,12 +3,13 @@
 // This file is the part of the guard that reads a command line the way the
 // shell would: it splits words and segments, resolves quotes and backslashes,
 // decodes `$'...'`, finds substitutions and heredoc bodies, expands the brace
-// groups and wildcards a command name may be built from, steps over wrapper
-// programs (env, timeout, xargs, flock, watch, chrt, ...) to the command they
-// run, finds the command strings a shell, fish, `find -exec` or another
-// program is handed, and holds the git option, config and environment rules
-// and the time budget. It names no repository and holds no repository policy:
-// what is refused, and why, is decided in guard-bash.mjs, which imports this.
+// groups, sequences, wildcards and extended glob groups a command name may be
+// built from, steps over wrapper programs (env, timeout, xargs, flock, watch,
+// chrt, ...) to the command they run, finds the command strings a shell,
+// fish, `find -exec` or another program is handed, and holds the git option,
+// config and environment rules and the time budget. It names no repository and
+// holds no repository policy: what is refused, and why, is decided in
+// guard-bash.mjs, which imports this.
 //
 // Several repositories carry this guard, and each keeps its own policy in its
 // own guard-bash.mjs. This file is the same in all of them: the canonical copy
@@ -88,8 +89,60 @@ export function startBudget(ms) {
  * Quotes and backslashes are resolved; operators and parentheses end a segment;
  * heredoc bodies are skipped. This is a deliberately small approximation of
  * shell parsing, good enough to find command names and their flags.
+ *
+ * A line holding an extended glob group (`@(...)`, `!(...)`, ...) is read
+ * twice, and the segments of both readings are returned: as written, where
+ * the `(` opens a subshell (`!(cmd)` runs cmd when extglob is off), and with
+ * each group read as `*` (see extglobAsStar()), since after `shopt -s extglob`
+ * `/usr/bin/g@(i)t` is one word that runs git.
  */
 export function tokenize(input) {
+    const segments = readSegments(input);
+    if (EXTGLOB_OPEN.test(input)) segments.push(...readSegments(extglobAsStar(input)));
+    return segments;
+}
+
+// Claude Code runs a command line by line, so a `shopt -s extglob` (or a shell
+// started with it on) changes how a later line is read: a `(` right after `?`,
+// `*`, `+`, `@` or `!` then opens an extended glob group that stays in the
+// word.
+export const EXTGLOB_OPEN = /[?*+@!]\(/;
+
+/**
+ * The text with each extended glob group (`@(...)`, `!(...)`, ...) read as
+ * `*`, which matches at least every name the group can (`g@(i)t` is read as
+ * `g*t`, `@(git)` as `*`). Quotes and backslashes inside a group are stepped
+ * over, so a `)` in them does not end it.
+ */
+export function extglobAsStar(text) {
+    spend();
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+        if ('?*+@!'.includes(text[i]) && text[i + 1] === '(') {
+            let depth = 0;
+            let j = i + 1;
+            do {
+                if (text[j] === '\\') j++;
+                else if (text[j] === "'" || text[j] === '"') {
+                    const end = text.indexOf(text[j], j + 1);
+                    j = end === -1 ? text.length : end;
+                } else if (text[j] === '(') depth++;
+                else if (text[j] === ')') depth--;
+                j++;
+            } while (depth > 0 && j < text.length);
+            out += '*';
+            i = j;
+        } else {
+            out += text[i];
+            i++;
+        }
+    }
+    return out;
+}
+
+/** One reading of a command line as tokenize() describes it, without the extended glob reading. */
+function readSegments(input) {
     const segments = [];
     let words = [];
     let word = null; // null = no word in progress ('' = empty quoted word)
@@ -264,20 +317,32 @@ export const ANSI_C_NUMERIC = [
  * opening quote) the way bash does: `\xHH`, `\NNN`, `\uHHHH`, `\UHHHHHHHH`,
  * `\cX` and the one-letter escapes. A NUL ends the text, as it does in bash.
  * Returns { text, next } (next = index after the closing quote).
+ *
+ * The end is found first, the way bash's lexer finds it: a backslash and the
+ * character after it are one unit, and the first other `'` closes the string.
+ * Only then are the escapes decoded, so `\c` cannot take the closing quote
+ * (`$'\c'` ends at its second quote) or the first backslash of a `\\`
+ * (`$'\c\\'` ends at its last quote), and what follows is read as the
+ * command line bash runs.
  */
 export function readAnsiC(input, i) {
+    let end = i;
+    while (end < input.length && input[end] !== "'") end += input[end] === '\\' ? 2 : 1;
+    end = Math.min(end, input.length);
+    const body = input.slice(i, end);
     let text = '';
     let ended = false;
     const add = (s) => {
         if (s === '\0') ended = true;
         if (!ended) text += s;
     };
-    while (i < input.length && input[i] !== "'") {
-        if (input[i] !== '\\' || i + 1 >= input.length) {
-            add(input[i++]);
+    i = 0;
+    while (i < body.length) {
+        if (body[i] !== '\\' || i + 1 >= body.length) {
+            add(body[i++]);
             continue;
         }
-        const rest = input.slice(i + 1, i + 10);
+        const rest = body.slice(i + 1, i + 10);
         const numeric = ANSI_C_NUMERIC.map(([re, base, skip]) => [re.exec(rest), base, skip]).find(([m]) => m);
         if (numeric) {
             const [[escape], base, skip] = numeric;
@@ -285,8 +350,9 @@ export function readAnsiC(input, i) {
             add(code <= 0x10ffff ? String.fromCodePoint(base === 8 ? code & 0xff : code) : `\\${escape}`);
             i += 1 + escape.length;
         } else if (rest[0] === 'c' && rest.length > 1) {
+            // `\c\\` is the control character of one backslash, and takes both.
             add(String.fromCharCode(rest.charCodeAt(1) & 0x1f));
-            i += 3;
+            i += rest[1] === '\\' && rest[2] === '\\' ? 4 : 3;
         } else if (Object.hasOwn(ANSI_C_ESCAPES, rest[0])) {
             add(ANSI_C_ESCAPES[rest[0]]);
             i += 2;
@@ -295,7 +361,7 @@ export function readAnsiC(input, i) {
             i += 2;
         }
     }
-    return { text, next: i + 1 };
+    return { text, next: end + 1 };
 }
 
 /**
@@ -343,7 +409,8 @@ export function extractSubstitutions(input) {
 
 /**
  * Index just past the `)` that closes a substitution whose body starts at `j`,
- * ignoring parens in quotes, escaped, or in heredoc bodies.
+ * ignoring parens in quotes (`$'...'` included, where `\'` does not end the
+ * string), escaped, or in heredoc bodies.
  */
 export function closeParen(input, j) {
     let depth = 1;
@@ -354,7 +421,8 @@ export function closeParen(input, j) {
         if (d === '\\' && q !== "'") j++;
         else if (q) {
             if (d === q) q = null;
-        } else if (d === "'" || d === '"') q = d;
+        } else if (d === '$' && input[j + 1] === "'") j = readAnsiC(input, j + 2).next - 1;
+        else if (d === "'" || d === '"') q = d;
         else if (d === '<' && input[j + 1] === '<' && input[j + 2] !== '<') {
             const h = readHeredocStart(input, j);
             if (h.delim) inner.push(h);
@@ -410,7 +478,10 @@ export function skipHeredocBody(input, i, delim) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-export const isAssignment = (w) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w);
+// `NAME=value` and bash's `NAME+=value` (which appends to NAME) in front of a
+// command both set NAME for it. A caller that keys on the text before the `=`
+// gets `NAME+` for the second; riskyEnv() reads that as NAME.
+export const isAssignment = (w) => /^[A-Za-z_][A-Za-z0-9_]*\+?=/.test(w);
 
 // ---------------------------------------------------------------------------
 // git
@@ -423,13 +494,27 @@ export const RISKY_GIT_CONFIG = /^(remote\.|url\.|credential\.|core\.sshcommand$
 // (`git -c diff.external=prog diff`, `-c core.pager=...`, `-c alias.x=!cmd`).
 export const EXEC_GIT_CONFIG =
     /^(core\.(pager|editor|fsmonitor|hookspath|askpass|gitproxy|attributesfile)$|diff\.|pager\.|alias\.|sequence\.editor$|gpg\.|filter\.|merge\.|interactive\.|include\.|includeif\.|uploadpack\.|protocol\.)/i;
+/**
+ * A pattern for a long option `--NAME` or `--NAME=VALUE` where NAME is `full`
+ * or any prefix of it at least `shortest` letters long: git's option parser
+ * accepts any unambiguous prefix of a long option.
+ */
+export function longOptionPrefixes(full, shortest) {
+    const tail = [...full.slice(shortest)].reduceRight((rest, ch) => `(?:${ch}${rest})?`, '');
+    return `--${full.slice(0, shortest)}${tail}(?:=|$)`;
+}
 // Options that turn a read-only git command (`git diff|log|show`, allow-listed in
 // .claude/settings.json) into a file write (`--output=FILE`), a read of any path
 // on disk (`--no-index`) or a program run (`--ext-diff`, git grep's
-// `--open-files-in-pager`). git rejects abbreviations of these diff options
-// (`--outp=` exits 128/129 and writes nothing), so the full spelling is enough;
-// `--output-indicator-*` and `--no-ext-diff` do not match.
-export const REFUSED_GIT_OPTION = /^--(?:output|no-index|ext-diff|open-files-in-pager)(?:=|$)/;
+// `--open-files-in-pager`). git's option parser accepts any unambiguous prefix
+// of a long option (`git grep --op=PROG` runs PROG), and which commands parse
+// these options that way differs between git versions, so every prefix that
+// can name only one of them is matched: from `--out`, `--no-ind`, `--ext` and
+// `--op` on. `--ours`, `--oneline`, `--output-indicator-*`, `--no-ext-diff` and
+// `--no-indent-heuristic` do not match.
+export const REFUSED_GIT_OPTION = new RegExp(
+    `^(?:${[['output', 3], ['no-index', 6], ['ext-diff', 3], ['open-files-in-pager', 2]].map(([full, shortest]) => longOptionPrefixes(full, shortest)).join('|')})`
+);
 // Options that make a network read command (`git fetch`, allow-listed in
 // .claude/settings.json) run the program they name against a local path or ssh
 // remote: `--upload-pack=CMD`, `--exec=CMD` (ls-remote, archive --remote) and
@@ -456,11 +541,17 @@ export const SAFE_ENV = new Set([
 export const PROGRAM_ENV = new Set(['GIT_PAGER', 'PAGER', 'GIT_EDITOR', 'GIT_SEQUENCE_EDITOR', 'EDITOR', 'VISUAL']);
 export const NOOP_PROGRAMS = new Set(['', 'cat', 'true', ':']);
 
-/** Name of the first risky variable in an env map ({ NAME: value | null }), or undefined. */
+/**
+ * Name of the first risky variable in an env map ({ NAME: value | null }), or
+ * undefined. A key `NAME+` is a `NAME+=value` assignment: it is read as NAME,
+ * and a program-valued NAME it appends to is harmless only when nothing is
+ * appended.
+ */
 export function riskyEnv(env) {
     return Object.keys(env).find((k) => {
-        if (!WATCHED_ENV.test(k) || SAFE_ENV.has(k)) return false;
-        if (PROGRAM_ENV.has(k)) return !NOOP_PROGRAMS.has(env[k]);
+        const name = k.endsWith('+') ? k.slice(0, -1) : k;
+        if (!WATCHED_ENV.test(name) || SAFE_ENV.has(name)) return false;
+        if (PROGRAM_ENV.has(name)) return name === k ? !NOOP_PROGRAMS.has(env[k]) : env[k] !== '';
         return true;
     });
 }
@@ -492,7 +583,7 @@ export function changesDirectory(words) {
     // A command name the shell expands (`$X sub`, `$(echo cd) sub`, `{cd,} sub`,
     // `c? sub` beside a file named cd) could be cd.
     if (CHDIR.has(basename(cmd)) || /[$`]/.test(cmd)) return true;
-    const forms = BRACE_GROUP.test(cmd) ? braceForms(cmd) : [cmd];
+    const forms = braceForms(cmd);
     if (forms === null) return true;
     return forms.some((f) => [...CHDIR].some((d) => basename(f) === d || (GLOB.test(basename(f)) && globMatches(basename(f), d))));
 }
@@ -743,35 +834,146 @@ export function fishScripts(args) {
 // ---------------------------------------------------------------------------
 
 // A command name the shell builds before it looks it up. Bash expands
-// a word's brace groups (`{git,}` is `git`, `g{i,x}t` is `git gxt`), and
-// matches a word holding a wildcard against the filesystem (`/usr/bin/g?t` is
-// `/usr/bin/git`; `g?t` is `git` once a file named git sits in the working
+// a word's brace groups (`{git,}` is `git`, `g{i,x}t` is `git gxt`) and
+// sequences (`{g..g}it` is `git`, `{a..c}` is `a b c`, `{1..3}` is `1 2 3`),
+// and matches a word holding a wildcard against the filesystem (`/usr/bin/g?t`
+// is `/usr/bin/git`; `g?t` is `git` once a file named git sits in the working
 // directory, and bash then finds git on the PATH), so the word as typed is not
 // the program that runs. A word with more brace forms than this is not expanded: it is
 // read as though it could name any checked command.
 export const MAX_BRACE_FORMS = 32;
+// A comma group (`{a,b}`) with no group inside it.
 export const BRACE_GROUP = /\{([^{}]*,[^{}]*)\}/;
+// Any group with no group inside it, and whether a `$` comes before it.
+export const BRACE_INNERMOST = /(\$?)\{([^{}]*)\}/;
+// What a sequence group holds: two whole numbers or two letters, and an optional step.
+export const BRACE_SEQUENCE = /^(?:([-+]?\d+)\.\.([-+]?\d+)|([A-Za-z])\.\.([A-Za-z]))(?:\.\.([-+]?\d+))?$/;
 export const GLOB = /[*?[]/;
+// Stand-ins for the braces of a group bash leaves as it is (`{git}`, and a
+// parameter such as `${HOME}`), so the search for the innermost group steps
+// over it to the group around it (`{g,{x}}` is `g {x}`).
+const KEPT_OPEN = '\uE000';
+const KEPT_CLOSE = '\uE001';
+const PARAMETER_OPEN = '\uE002';
+const PARAMETER_CLOSE = '\uE003';
 
-/** Every word brace expansion could make of `word`, or null past MAX_BRACE_FORMS. */
+/**
+ * The words the body of a sequence group (`a..e..2`, `01..10`) stands for, as
+ * bash makes them (numbers padded to the wider end when either is written with
+ * a leading zero, the step's sign ignored); null past MAX_BRACE_FORMS, or
+ * undefined when the body is not a sequence.
+ */
+export function braceSequence(body) {
+    const m = BRACE_SEQUENCE.exec(body);
+    if (!m) return undefined;
+    const numeric = m[1] !== undefined;
+    const from = numeric ? Number(m[1]) : m[3].charCodeAt(0);
+    const to = numeric ? Number(m[2]) : m[4].charCodeAt(0);
+    const step = Math.abs(Number(m[5] ?? 1)) || 1;
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || Math.floor(Math.abs(to - from) / step) >= MAX_BRACE_FORMS) return null;
+    const padded = numeric && (/^[-+]?0\d/.test(m[1]) || /^[-+]?0\d/.test(m[2]));
+    const width = padded ? Math.max(m[1].length, m[2].length) : 0;
+    const pad = (k) => (k < 0 ? `-${String(-k).padStart(width - 1, '0')}` : String(k).padStart(width, '0'));
+    const members = [];
+    for (let k = from; from <= to ? k <= to : k >= to; k += from <= to ? step : -step) {
+        members.push(numeric ? pad(k) : String.fromCharCode(k));
+    }
+    return members;
+}
+
+/**
+ * Every word brace expansion could make of `word` (the word itself first), or
+ * null past MAX_BRACE_FORMS. Comma groups and sequences are expanded, innermost
+ * first; a sequence too long to expand is read as the wildcard `*`. A group
+ * that is neither (`{git}`, `g{i}t`) is left as it is, as bash leaves it, and
+ * each form holding one is also read once more with the braces of all such
+ * groups gone (`g{i}t` as `git`), which can only refuse more. After a `$`
+ * (`${HOME}`) a group without a comma is a parameter and only left as it is.
+ */
 export function braceForms(word) {
     const forms = [word];
     const pending = [word];
     while (pending.length) {
         const form = pending.pop();
-        const group = BRACE_GROUP.exec(form);
+        const group = BRACE_INNERMOST.exec(form);
         if (!group) continue;
-        for (const alternative of group[1].split(',')) {
-            const expanded = form.slice(0, group.index) + alternative + form.slice(group.index + group[0].length);
+        const [whole, dollar, body] = group;
+        let alternatives;
+        if (body.includes(',')) alternatives = body.split(',').map((a) => dollar + a);
+        else {
+            // A sequence with more members than the forms left (`file{1..100}.txt`)
+            // is read as `*`, which matches every word its members can make.
+            const sequence = dollar ? undefined : braceSequence(body);
+            if (sequence === null || (sequence && forms.length + sequence.length > MAX_BRACE_FORMS)) alternatives = ['*'];
+            else alternatives = sequence ?? [dollar ? `$${PARAMETER_OPEN}${body}${PARAMETER_CLOSE}` : `${KEPT_OPEN}${body}${KEPT_CLOSE}`];
+        }
+        for (const alternative of alternatives) {
+            const expanded = form.slice(0, group.index) + alternative + form.slice(group.index + whole.length);
             if (forms.push(expanded) > MAX_BRACE_FORMS) return null;
             pending.push(expanded);
         }
     }
-    return forms;
+    const parameters = (f) => f.replaceAll(PARAMETER_OPEN, '{').replaceAll(PARAMETER_CLOSE, '}');
+    const kept = forms.map((f) => parameters(f.replaceAll(KEPT_OPEN, '{').replaceAll(KEPT_CLOSE, '}')));
+    const bare = forms.filter((f) => f.includes(KEPT_OPEN)).map((f) => parameters(f.replaceAll(KEPT_OPEN, '').replaceAll(KEPT_CLOSE, '')));
+    return [...new Set([...kept, ...bare])];
+}
+
+// The character classes a bracket expression may name (`[[:alpha:]]`), read
+// as broadly as bash reads them in a UTF-8 locale. A class not listed here, an
+// equivalence class (`[[=g=]]`) and a collating symbol (`[[.g.]]`) are read as
+// matching any character, which can only refuse more.
+export const POSIX_CLASSES = {
+    alnum: /[\p{L}\p{N}]/u,
+    alpha: /\p{L}/u,
+    ascii: /[\0-\x7f]/,
+    blank: /[\t\p{Zs}]/u,
+    cntrl: /\p{Cc}/u,
+    digit: /[0-9]/,
+    graph: /[^\s\p{Cc}]/u,
+    lower: /\p{Ll}/u,
+    print: /[^\p{Cc}]/u,
+    punct: /[^\p{L}\p{N}\s\p{Cc}]/u,
+    space: /\s/,
+    upper: /\p{Lu}/u,
+    word: /[\p{L}\p{N}_]/u,
+    xdigit: /[0-9A-Fa-f]/,
+};
+
+/**
+ * Read the bracket expression opening at pattern[i]: { close, negate, units },
+ * where close is the index of its `]` and each unit is { ch } or { cls } (a
+ * class name, or null for one read as any character); null when no `]` closes
+ * it, so the `[` is an ordinary character. As in bash, a `!` or `^` right
+ * after the `[` negates the set, the first character after that is in the set
+ * even when it is `]` (`[]]`, `[!]]`), and a `]` inside `[:alpha:]` does not
+ * close it.
+ */
+function readBracket(pattern, i) {
+    let j = i + 1;
+    const negate = pattern[j] === '!' || pattern[j] === '^';
+    if (negate) j++;
+    const units = [];
+    for (let first = true; j < pattern.length; first = false) {
+        if (pattern[j] === ']' && !first) return { close: j, negate, units };
+        if (pattern[j] === '[' && /[:=.]/.test(pattern[j + 1] ?? '')) {
+            const end = pattern.indexOf(`${pattern[j + 1]}]`, j + 2);
+            if (end !== -1) {
+                const cls = pattern[j + 1] === ':' && Object.hasOwn(POSIX_CLASSES, pattern.slice(j + 2, end)) ? pattern.slice(j + 2, end) : null;
+                units.push({ cls });
+                j = end + 2;
+                continue;
+            }
+        }
+        units.push({ ch: pattern[j] });
+        j++;
+    }
+    return null;
 }
 
 /**
- * Whether the glob `pattern` (`*`, `?`, `[...]`) matches all of `name`. The
+ * Whether the glob `pattern` (`*`, `?`, `[...]`, POSIX classes such as
+ * `[[:alpha:]]` included) matches all of `name`. The
  * match runs in time linear in the two lengths, so a word cannot stall the hook
  * past its timeout (Claude Code runs the command when the hook times out): a
  * pattern of many `*` compiled to a regexp (`.*.*.*…`) backtracks exponentially
@@ -784,32 +986,39 @@ export function globMatches(pattern, name) {
     const lastClose = pattern.lastIndexOf(']');
     for (let i = 0; i < pattern.length; i++) {
         const c = pattern[i];
-        const close = c === '[' && lastClose >= i + 2 ? pattern.indexOf(']', i + 2) : -1;
+        const bracket = c === '[' && lastClose >= i + 2 ? readBracket(pattern, i) : null;
+        // A `]` after this `[` that closes nothing (it sits inside a class) is
+        // not read further: the pattern could match anything. Reading on from
+        // each such `[` would cost the square of the pattern's length.
+        if (c === '[' && lastClose >= i + 2 && bracket === null) return true;
         if (c === '*') {
             if (tokens.length === 0 || tokens[tokens.length - 1].kind !== 'star') tokens.push({ kind: 'star' });
         } else if (c === '?') tokens.push({ kind: 'any' });
-        else if (close !== -1) {
-            // A bracket expression holds at least one character (a leading `]` is
-            // part of the set), then runs to the first `]` after it.
-            const body = pattern.slice(i + 1, close);
-            const negate = body[0] === '!' || body[0] === '^';
-            const set = negate ? body.slice(1) : body;
+        else if (bracket) {
             const ranges = [];
-            for (let j = 0; j < set.length; j++) {
-                const isRange = j + 2 < set.length && set[j + 1] === '-';
-                const hi = isRange ? set[j + 2] : set[j];
-                if (set[j] > hi) return true; // a range we cannot read could match anything
-                ranges.push([set[j], hi]);
+            const classes = [];
+            const { units } = bracket;
+            for (let j = 0; j < units.length; j++) {
+                if (units[j].ch === undefined) {
+                    classes.push(units[j].cls === null ? /[^]/u : POSIX_CLASSES[units[j].cls]);
+                    continue;
+                }
+                const isRange = j + 2 < units.length && units[j + 1].ch === '-';
+                const hi = isRange ? units[j + 2].ch : units[j].ch;
+                // A range we cannot read (reversed, or ending in a class) could match anything.
+                if (hi === undefined || units[j].ch > hi) return true;
+                ranges.push([units[j].ch, hi]);
                 if (isRange) j += 2;
             }
-            tokens.push({ kind: 'set', negate, ranges });
-            i = close;
+            tokens.push({ kind: 'set', negate: bracket.negate, ranges, classes });
+            i = bracket.close;
         } else tokens.push({ kind: 'char', c });
     }
+    const inSet = (token, ch) => token.ranges.some(([lo, hi]) => lo <= ch && ch <= hi) || token.classes.some((re) => re.test(ch));
     const fits = (token, ch) =>
         token.kind === 'any' ||
         (token.kind === 'char' && token.c === ch) ||
-        (token.kind === 'set' && token.ranges.some(([lo, hi]) => lo <= ch && ch <= hi) !== token.negate);
+        (token.kind === 'set' && inSet(token, ch) !== token.negate);
     let p = 0;
     let t = 0;
     let star = -1;
@@ -848,12 +1057,14 @@ export function commandNameReader(checkedNames) {
      * any program, so it is read as every checked name it fits when `commandWord`
      * says the shell runs the word; a later word made only of wildcards (`ls *`)
      * is left alone, since reading it as each checked program would refuse every
-     * such listing. Otherwise null. Quotes are gone from the words by now, so a
+     * such listing. An extended glob group in the word (`g@(i)t`) is read as
+     * `*` (see extglobAsStar()). Otherwise null. Quotes are gone from the words by now, so a
      * quoted `{` or `*` reads as an unquoted one, which can only refuse more.
      */
     function builtCommandName(word, commandWord = false) {
-        if (!/[{}*?[]/.test(word)) return null;
-        const forms = BRACE_GROUP.test(word) ? braceForms(word) : [word];
+        const extglob = EXTGLOB_OPEN.test(word);
+        if (!/[{}*?[]/.test(word) && !extglob) return null;
+        const forms = braceForms(extglob ? extglobAsStar(word) : word);
         if (forms === null) return { braces: true };
         const globs = new Set();
         for (const form of forms) {

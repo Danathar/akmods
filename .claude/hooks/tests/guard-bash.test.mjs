@@ -244,6 +244,23 @@ const allowed = [
     "awk '{print $1,$2}' build/cache.json",
     "echo $'a\\tb'",
     "git log --format=$'%h\\t%s' -3",
+    // Spellings next to the reading fixes of #186 that build no checked
+    // command: `$'...'` text, git options that only share a first letter or
+    // two with a refused one, POSIX classes in a listing, long brace
+    // sequences, parameters in braces, nested JSON and `NAME+=value`.
+    "printf %s $'\\n'",
+    "echo $'it'",
+    "echo $'\\c' done",
+    'git log --oneline -3',
+    'git diff --output-indicator-new=+ HEAD',
+    'git diff --no-ext-diff HEAD',
+    'git checkout --ours -- README.md',
+    'ls [[:upper:]]*.md',
+    'touch file{1..100}.txt',
+    'mkdir -p d{1..3}',
+    'ls ${HOME}/bin',
+    "jq -n '{a:{b:1},c:{d:2}}'",
+    'FOO+=bar ls',
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -853,6 +870,47 @@ const blocked = [
     // and so can a wildcard, beside a file named cd
     ['c? sub && just --evaluate', 'directory change'],
     ['p?shd sub && just --evaluate', 'directory change'],
+    // --- spellings the adopting repositories refused with local rules (#186) ---
+    // `$'...'` ends where bash's lexer ends it: `\c` takes neither the closing
+    // quote nor the first backslash of `\\`, and inside `$(...)` an escaped
+    // quote does not end it, so the command after it is read.
+    ["echo $'\\c\\\\' ; git push --force origin main", 'force'],
+    ["echo $'\\c' ; git push --force origin main", 'force'],
+    ["echo $(printf $'\\'') ; git push --force origin main", 'force'],
+    ['echo "$(printf $\'\\\'\')" ; git push --force origin main', 'force'],
+    // a POSIX class in a bracket expression
+    ['[[:alpha:]]it push --force origin main', 'force'],
+    ['/usr/bin/g[[:alpha:]]t diff --no-index /dev/null .env', '--no-index'],
+    ['s[[:lower:]]do id', 'privilege escalation'],
+    // brace sequences, and a group without a comma (inside a comma group too)
+    ['{g..g}it push --force origin main', 'spell the command name out'],
+    ['{f..h}it push --force origin main', 'spell the command name out'],
+    ['run{0..0} id', 'spell the command name out'],
+    ['run{0..100} id', 'spell the command name out'],
+    ['setarch x86_64 {s..s}udo id', '`setarch` runs a command'],
+    ['{g,{x}}it push --force origin main', 'spell the command name out'],
+    ['g{i}t push --force origin main', 'spell the command name out'],
+    ['{c..c}d sub && just --evaluate', 'directory change'],
+    // extended glob groups, read both as written and as `*` (`shopt -s extglob`)
+    ['/usr/bin/g@(i)t push --force origin main', 'force'],
+    ['@(git) push --force origin main', 'spell the command name out'],
+    ['s+(u)do id', 'privilege escalation'],
+    ['setarch x86_64 g@(i)t push --force origin main', '`setarch` runs a command'],
+    ['!(sudo id)', 'privilege escalation'],
+    ['c@(d) sub && just --evaluate', 'directory change'],
+    // `NAME+=value` sets NAME for the command as `NAME=value` does
+    ['GIT_EXTERNAL_DIFF+=x git diff', 'GIT_EXTERNAL_DIFF'],
+    ['PAGER+=less git log', 'PAGER'],
+    ['NODE_OPTIONS+=--require=./x.js node --test', 'NODE_OPTIONS'],
+    ['export PAGER+=x; git log', 'PAGER'],
+    ['JUST_JUSTFILE+=x just --evaluate', 'JUST_JUSTFILE'],
+    ['export GH_REPO=Danathar/akmods; GH_REPO+=-x gh issue create -t x -b y', 'akmods-x'],
+    // git takes any unambiguous prefix of a long option
+    ['git diff --out=/home/u/.bashrc', 'writes a file'],
+    ['git log --outp=/home/u/.bashrc', 'writes a file'],
+    ['git diff --no-ind /etc/passwd /dev/null', 'writes a file'],
+    ['git log --ext -p', 'writes a file'],
+    ['git grep --op=vim foo', 'writes a file'],
 ];
 
 for (const command of allowed) {
@@ -946,6 +1004,15 @@ test('globMatches reads * ? and bracket expressions as the shell does, in linear
     assert.equal(globMatches('g[i', 'g[i'), true); // an unclosed [ is a literal
     assert.equal(globMatches('g[i', 'git'), false);
     assert.equal(globMatches('g[z-a]t', 'xyz'), true); // a bracket we cannot read could match anything
+    // POSIX classes, and a `]` right after `[!` (#186)
+    assert.equal(globMatches('[[:alpha:]]it', 'git'), true);
+    assert.equal(globMatches('g[[:alpha:]]t', 'g1t'), false);
+    assert.equal(globMatches('g[[:digit:]]t', 'git'), false);
+    assert.equal(globMatches('g[![:digit:]]t', 'git'), true);
+    assert.equal(globMatches('[[:lower:][:digit:]]it', 'git'), true);
+    assert.equal(globMatches('[!]]it', 'git'), true);
+    assert.equal(globMatches('[[=g=]]it', 'git'), true); // an equivalence class is read as any character
+    assert.equal(globMatches('g[[:nope:]]t', 'git'), true); // so is a class bash does not know
     const started = Date.now();
     assert.equal(globMatches(`${'*'.repeat(64)}Z`, 'a'.repeat(64)), false);
     assert.equal(globMatches(`${'a*'.repeat(30)}b`, 'a'.repeat(200)), false);
