@@ -111,6 +111,94 @@ test('parseDiff reads quoted paths and ignores deleted files', () => {
     assert.deepEqual([...r.keys()], ['scripts/odd "name".mjs']);
 });
 
+test('parseDiff merges ranges whatever order the hunks come in', () => {
+    const r = parseDiff(
+        ['+++ b/scripts/a.mjs', '@@ -9 +9 @@', '-x', '+x', '@@ -1 +1 @@', '-y', '+y', '@@ -5 +5 @@', '-z', '+z'].join('\n'),
+    );
+    assert.deepEqual(r.get('scripts/a.mjs'), [
+        { start: 1, end: 1 },
+        { start: 5, end: 5 },
+        { start: 9, end: 9 },
+    ]);
+});
+
+test('parseDiff reads counts of 10 or more and ignores a header-like line that does not start one', () => {
+    const r = parseDiff(
+        [
+            '+++ b/scripts/a.mjs',
+            'x @@ -1 +40 @@',
+            '@@ -10,10 +12,11 @@',
+            ...Array.from({ length: 10 }, () => '-old'),
+            ...Array.from({ length: 11 }, () => '+new'),
+        ].join('\n'),
+    );
+    assert.deepEqual(r.get('scripts/a.mjs'), [{ start: 12, end: 22 }]);
+});
+
+test('parseDiff keeps a path that has no b/ prefix as it is, and ignores a hunk before any file', () => {
+    const r = parseDiff(['@@ -1 +1 @@', '-a', '+b', '+++ scripts/lib/x.mjs', '@@ -1 +1 @@', '-a', '+b'].join('\n'));
+    assert.deepEqual([...r.keys()], ['scripts/lib/x.mjs']);
+});
+
+test('parseDiff counts context lines but not removed lines or no-newline markers', () => {
+    // Each fake header below is an added line ("++ b/...") inside a hunk; the
+    // hunk after it still belongs to scripts/a.mjs.
+    const withContext = parseDiff(
+        [
+            '+++ b/scripts/a.mjs',
+            '@@ -1,2 +1,3 @@',
+            ' keep',
+            '+++ b/scripts/other.mjs',
+            '-old',
+            '+new',
+            '@@ -9 +10 @@',
+            '-x',
+            '+y',
+        ].join('\n'),
+    );
+    assert.deepEqual([...withContext.keys()], ['scripts/a.mjs']);
+    assert.deepEqual(withContext.get('scripts/a.mjs'), [
+        { start: 1, end: 3 },
+        { start: 10, end: 10 },
+    ]);
+    const withMarker = parseDiff(
+        [
+            '+++ b/scripts/a.mjs',
+            '@@ -1 +1 @@',
+            '-old',
+            '\\ No newline at end of file',
+            '+++ b/scripts/other.mjs',
+            '@@ -9 +10 @@',
+            '-x',
+            '+y',
+        ].join('\n'),
+    );
+    assert.deepEqual([...withMarker.keys()], ['scripts/a.mjs']);
+    assert.deepEqual(withMarker.get('scripts/a.mjs'), [
+        { start: 1, end: 1 },
+        { start: 10, end: 10 },
+    ]);
+    // A context line can be the last one a hunk owes; the next header after
+    // it is real.
+    const contextLast = parseDiff(
+        [
+            '+++ b/scripts/a.mjs',
+            '@@ -1,2 +1,2 @@',
+            '+++ b/scripts/other.mjs',
+            ' keep',
+            '-old',
+            '+++ b/scripts/b.mjs',
+            '@@ -1 +1 @@',
+            '-x',
+            '+y',
+        ].join('\n'),
+    );
+    assert.deepEqual([...contextLast.entries()], [
+        ['scripts/a.mjs', [{ start: 1, end: 2 }]],
+        ['scripts/b.mjs', [{ start: 1, end: 1 }]],
+    ]);
+});
+
 test('parseDiff reads an added line that looks like a header as content', () => {
     const r = parseDiff(
         [
@@ -165,6 +253,10 @@ test('tests, docs, config and nested files are not mutated', () => {
         'scripts/x.js',
         '.github/scripts/check-upstream-sync.sh',
         'stryker.config.mjs',
+        'x/.claude/hooks/guard-bash.mjs',
+        '.claude/hooks/guard-bash.mjs.orig',
+        'x/scripts/a.mjs',
+        'scripts/a.mjs.orig',
         'docs/quality.md',
         'Justfile',
     ]) {
@@ -224,6 +316,8 @@ test('originalText slices one line or several, columns 1-based and end exclusive
     const src = 'const a = 1;\nif (a > 0) {\n    run();\n}\n';
     assert.equal(originalText(src, { start: { line: 2, column: 5 }, end: { line: 2, column: 10 } }), 'a > 0');
     assert.equal(originalText(src, { start: { line: 2, column: 12 }, end: { line: 4, column: 2 } }), '{\n    run();\n}');
+    const tail = 'if (a) {\n    run();\n} else {\n';
+    assert.equal(originalText(tail, { start: { line: 1, column: 8 }, end: { line: 3, column: 2 } }), '{\n    run();\n}');
 });
 
 const at = (line, column, endLine, endColumn) => ({ start: { line, column }, end: { line: endLine, column: endColumn } });
@@ -261,9 +355,38 @@ test('survivors makes absolute report paths relative to the root', () => {
     assert.equal(survivors(abs, '/repo')[0].file, 'scripts/a.mjs');
 });
 
-test('survivors of an empty or file-less report is empty', () => {
+test('survivors of an empty report is empty', () => {
     assert.deepEqual(survivors({ files: {} }), []);
-    assert.deepEqual(survivors({}), []);
+});
+
+test('survivors sorts by file, then line, then column, and fills a missing replacement', () => {
+    const src = 'a(1); b(2);\nc(3); d(4);\n';
+    const r = {
+        files: {
+            // Neither in order nor in reverse order, by file or within one,
+            // and a later file has an earlier line.
+            'scripts/b.mjs': { source: src, mutants: [{ mutatorName: 'M', replacement: 'x', status: 'Survived', location: at(2, 1, 2, 5) }] },
+            'scripts/c.mjs': { source: src, mutants: [{ mutatorName: 'M', replacement: 'x', status: 'Survived', location: at(1, 1, 1, 5) }] },
+            'scripts\\a.mjs': {
+                source: src,
+                mutants: [
+                    { mutatorName: 'M', replacement: 'x', status: 'Survived', location: at(2, 7, 2, 11) },
+                    { mutatorName: 'M', status: 'Survived', location: at(1, 7, 1, 11) },
+                    { mutatorName: 'M', replacement: 'x', status: 'Survived', location: at(2, 1, 2, 5) },
+                ],
+            },
+        },
+    };
+    assert.deepEqual(
+        survivors(r, '/repo').map((m) => [m.file, m.line, m.column, m.original, m.replacement]),
+        [
+            ['scripts/a.mjs', 1, 7, 'b(2)', ''],
+            ['scripts/a.mjs', 2, 1, 'c(3)', 'x'],
+            ['scripts/a.mjs', 2, 7, 'd(4)', 'x'],
+            ['scripts/b.mjs', 2, 1, 'c(3)', 'x'],
+            ['scripts/c.mjs', 1, 1, 'a(1)', 'x'],
+        ],
+    );
 });
 
 // -------------------------------------------------------------------- ledger
@@ -336,6 +459,49 @@ test('formatSurvivor names the place, mutator, status and both texts on one line
     assert.equal(
         formatSurvivor({ ...SURVIVOR, original: 'a\n  b' }),
         'scripts/a.mjs:2:12 EqualityOperator (Survived): `a b` -> `x >= 0`',
+    );
+    assert.equal(
+        formatSurvivor({ ...SURVIVOR, original: 'x'.repeat(100), replacement: 'y'.repeat(81) }),
+        `scripts/a.mjs:2:12 EqualityOperator (Survived): \`${'x'.repeat(80)}\` -> \`${'y'.repeat(80)}\``,
+    );
+});
+
+test('summarize writes exactly this text', () => {
+    assert.equal(
+        summarize([], [SURVIVOR]),
+        '## Mutation check on changed lines (advisory)\n\nNo new surviving mutants (1 accepted in the ledger).',
+    );
+    assert.equal(
+        summarize([], [], ['scripts/x.mjs']),
+        [
+            '## Mutation check on changed lines (advisory)',
+            '',
+            'Changed scripts with no `scripts/tests/<name>.test.mjs` to run, so no line of them is checked:',
+            '',
+            '- scripts/x.mjs',
+            '',
+            '',
+            '0 survivor(s) accepted in the ledger.',
+        ].join('\n'),
+    );
+    assert.equal(
+        summarize([SURVIVOR], [SURVIVOR, SURVIVOR]),
+        [
+            '## Mutation check on changed lines (advisory)',
+            '',
+            '1 mutant(s) on changed lines survived: the line can be broken this way without any test failing.',
+            '',
+            `- ${formatSurvivor(SURVIVOR)}`,
+            '',
+            'Add a test that fails on each. If a survivor is equivalent (behaves the same) or harmless ' +
+                'over-refusal, add its entry below to `.mutation-survivors.json` with a real reason instead.',
+            '',
+            '```json',
+            JSON.stringify([ledgerEntry(SURVIVOR)], null, 4),
+            '```',
+            '',
+            '2 survivor(s) accepted in the ledger.',
+        ].join('\n'),
     );
 });
 
@@ -463,20 +629,28 @@ test('reads several reports and fails on a survivor in any of them', () => {
 test('exits 2 on a malformed ledger, a missing report and bad arguments', () => {
     const dir = layout({
         'r.json': report(mutant('Killed')),
-        'bad.json': { survivors: [{ ...ACCEPT, reason: '' }] },
+        'bad.json': { survivors: [{ ...ACCEPT, reason: '' }, { ...ACCEPT, file: '' }] },
         'broken.json': '{ not json',
     });
     try {
         const bad = run(['--report', 'r.json', '--ledger', 'bad.json'], dir);
         assert.equal(bad.status, 2);
-        assert.match(bad.stderr, /bad\.json is malformed/);
-        assert.equal(run(['--report', 'r.json', '--ledger', 'broken.json'], dir).status, 2);
-        assert.equal(run(['--report', 'missing.json'], dir).status, 2);
+        assert.match(bad.stderr, /bad\.json is malformed:\n {2}survivors\[0\]: "reason" must be a non-empty string\n {2}survivors\[1\]: "file"/);
+        const broken = run(['--report', 'r.json', '--ledger', 'broken.json'], dir);
+        assert.equal(broken.status, 2);
+        assert.match(broken.stderr, /cannot read ledger .*broken\.json: /);
+        const missing = run(['--report', 'missing.json'], dir);
+        assert.equal(missing.status, 2);
+        assert.match(missing.stderr, /cannot read Stryker report .*missing\.json: /);
         const unknown = run(['--frobnicate'], dir);
         assert.equal(unknown.status, 2);
         assert.match(unknown.stderr, /unknown argument --frobnicate/);
-        assert.equal(run(['--base'], dir).status, 2);
-        assert.equal(run(['--stryker', '--dry-run'], dir).status, 2);
+        const noBase = run(['--base'], dir);
+        assert.equal(noBase.status, 2);
+        assert.match(noBase.stderr, /--base needs a value/);
+        const noStryker = run(['--stryker', '--dry-run'], dir);
+        assert.equal(noStryker.status, 2);
+        assert.match(noStryker.stderr, /--stryker needs a value/);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
@@ -581,6 +755,105 @@ test('exits 2 when the base ref does not exist', () => {
         const r = run(['--base', 'no-such-ref'], dir);
         assert.equal(r.status, 2);
         assert.match(r.stderr, /git diff against no-such-ref failed/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('--base defaults to origin/main and --root sets the repository', () => {
+    const dir = repo();
+    try {
+        git(dir, 'update-ref', 'refs/remotes/origin/main', 'main');
+        commit(dir, { 'scripts/tool.mjs': 'export const t = 2;\n' });
+        const r = run(['--root', dir, '--dry-run'], tmpdir());
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(JSON.parse(r.stdout).runs, [
+            { name: 'scripts-tool', command: 'node --test scripts/tests/tool.test.mjs', mutate: ['scripts/tool.mjs:1-1'] },
+        ]);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+// A stand-in for the Stryker binary: it records how it was started, prints a
+// line, and then does what FAKE_STRYKER says.
+const FAKE_STRYKER = `
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+writeFileSync('stryker-call.json', JSON.stringify({
+    argv: process.argv.slice(2),
+    command: process.env.MUTATION_TEST_COMMAND,
+    report: process.env.MUTATION_REPORT,
+    path: process.env.PATH,
+}));
+console.log('fake stryker ran');
+const mode = process.env.FAKE_STRYKER;
+if (mode === 'exit') process.exit(3);
+if (mode === 'survivor' || mode === 'broken') {
+    mkdirSync(dirname(process.env.MUTATION_REPORT), { recursive: true });
+    writeFileSync(process.env.MUTATION_REPORT, mode === 'broken' ? '{ not json' : JSON.stringify(${JSON.stringify(
+        report(mutant('Survived')),
+    ).replaceAll('scripts/a.mjs', 'scripts/tool.mjs')}));
+}
+`;
+
+function strykerRepo() {
+    const dir = repo();
+    commit(dir, { 'scripts/tool.mjs': 'a();\nexport const t = 1;\nb();\n' });
+    writeFileSync(join(dir, 'fake-stryker.mjs'), FAKE_STRYKER);
+    return dir;
+}
+
+const strykerRun = (dir, mode) =>
+    run(['--root', dir, '--base', 'main', '--stryker', 'fake-stryker.mjs'], tmpdir(), { FAKE_STRYKER: mode });
+
+test('runs Stryker in the repository with the config, the ranges, the test command and the report path', () => {
+    const dir = strykerRepo();
+    try {
+        const r = strykerRun(dir, 'survivor');
+        assert.equal(r.status, 1, r.stderr);
+        const call = JSON.parse(readFileSync(join(dir, 'stryker-call.json'), 'utf8'));
+        assert.deepEqual(call, {
+            argv: ['run', 'stryker.config.mjs', '--mutate', 'scripts/tool.mjs:1-1,scripts/tool.mjs:3-3'],
+            command: 'node --test scripts/tests/tool.test.mjs',
+            report: 'reports/mutation/scripts-tool.json',
+            path: process.env.PATH,
+        });
+        assert.ok(
+            r.stdout.startsWith(
+                '\n== scripts-tool: mutating 2 range(s) against `node --test scripts/tests/tool.test.mjs`\n' +
+                    '   scripts/tool.mjs:1-1\n   scripts/tool.mjs:3-3\nfake stryker ran\n',
+            ),
+            r.stdout,
+        );
+        assert.match(r.stdout, /scripts\/tool\.mjs:2:12 EqualityOperator \(Survived\)/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('a stale report from an earlier run is removed, and no report means no survivor', () => {
+    const dir = strykerRepo();
+    try {
+        assert.equal(strykerRun(dir, 'survivor').status, 1);
+        const r = strykerRun(dir, 'none');
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.equal(existsSync(join(dir, 'reports/mutation/scripts-tool.json')), false);
+        assert.match(r.stdout, /No new surviving mutants/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('exits 2 when Stryker fails or writes an unreadable report', () => {
+    const dir = strykerRepo();
+    try {
+        const failed = strykerRun(dir, 'exit');
+        assert.equal(failed.status, 2);
+        assert.match(failed.stderr, /Stryker \(scripts-tool\) exited with 3/);
+        const broken = strykerRun(dir, 'broken');
+        assert.equal(broken.status, 2);
+        assert.match(broken.stderr, /cannot read Stryker report .*scripts-tool\.json: /);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

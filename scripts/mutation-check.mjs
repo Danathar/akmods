@@ -59,31 +59,26 @@ function unquote(path) {
 export function parseDiff(diff) {
     const out = new Map();
     let file = null;
-    // Lines still owed to the current hunk, so an added line that itself
-    // starts with "++ " or "@@ " is read as content, not as a header.
-    let oldLeft = 0;
+    // New-side lines still owed to the current hunk, so an added line that
+    // itself starts with "++ " is read as content, not as a file header.
+    // Removed lines and "\ No newline" markers never look like a header, so
+    // only added and context lines are counted.
     let newLeft = 0;
     for (const line of diff.split('\n')) {
-        if (oldLeft > 0 || newLeft > 0) {
-            if (line.startsWith('-')) oldLeft--;
-            else if (line.startsWith('+')) newLeft--;
-            else if (line.startsWith(' ')) {
-                oldLeft--;
-                newLeft--;
-            }
+        if (newLeft > 0 && (line.startsWith('+') || line.startsWith(' '))) {
+            newLeft--;
             continue;
         }
         if (line.startsWith('+++ ')) {
-            const target = unquote(line.slice(4));
-            file = target === '/dev/null' ? null : target.replace(/^b\//, '');
+            // A deleted file's target is /dev/null; its hunks add no line.
+            file = unquote(line.slice(4)).replace(/^b\//, '');
             continue;
         }
-        const hunk = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
+        const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
         if (!hunk) continue;
-        oldLeft = hunk[1] === undefined ? 1 : Number(hunk[1]);
-        newLeft = hunk[3] === undefined ? 1 : Number(hunk[3]);
+        newLeft = hunk[2] === undefined ? 1 : Number(hunk[2]);
         if (file === null || newLeft === 0) continue;
-        const start = Number(hunk[2]);
+        const start = Number(hunk[1]);
         const ranges = out.get(file) ?? [];
         ranges.push({ start, end: start + newLeft - 1 });
         out.set(file, ranges);
@@ -135,7 +130,8 @@ export function testCommand(tests) {
 export function planRuns(changed, testFiles) {
     const runs = new Map();
     const untested = [];
-    for (const [file, ranges] of [...changed].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    for (const file of [...changed.keys()].sort()) {
+        const ranges = changed.get(file);
         const group = groupFor(file, testFiles);
         if (!group) continue;
         if (!group.tests.length) {
@@ -149,7 +145,7 @@ export function planRuns(changed, testFiles) {
     return { runs: [...runs.values()], untested };
 }
 
-const norm = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+const norm = (s) => s.replace(/\s+/g, ' ').trim();
 
 /**
  * The source text a mutant replaced. Report locations are 1-based lines and
@@ -159,11 +155,11 @@ export function originalText(source, location) {
     const lines = source.split('\n');
     const { start, end } = location;
     if (start.line === end.line) {
-        return lines[start.line - 1]?.slice(start.column - 1, end.column - 1) ?? '';
+        return lines[start.line - 1].slice(start.column - 1, end.column - 1);
     }
-    const parts = [lines[start.line - 1]?.slice(start.column - 1) ?? ''];
-    for (let l = start.line; l < end.line - 1; l++) parts.push(lines[l] ?? '');
-    parts.push(lines[end.line - 1]?.slice(0, end.column - 1) ?? '');
+    const parts = [lines[start.line - 1].slice(start.column - 1)];
+    for (let l = start.line; l < end.line - 1; l++) parts.push(lines[l]);
+    parts.push(lines[end.line - 1].slice(0, end.column - 1));
     return parts.join('\n');
 }
 
@@ -174,9 +170,10 @@ export function originalText(source, location) {
  */
 export function survivors(report, root = process.cwd()) {
     const out = [];
-    for (const [key, entry] of Object.entries(report?.files ?? {})) {
+    // `files`, `source` and `mutants` are required by the report schema.
+    for (const [key, entry] of Object.entries(report.files)) {
         const file = (isAbsolute(key) ? relative(root, key) : key).replace(/\\/g, '/');
-        for (const m of entry.mutants ?? []) {
+        for (const m of entry.mutants) {
             if (!SURVIVING.has(m.status)) continue;
             out.push({
                 file,
@@ -184,13 +181,13 @@ export function survivors(report, root = process.cwd()) {
                 column: m.location.start.column,
                 status: m.status,
                 mutator: m.mutatorName,
-                original: originalText(entry.source ?? '', m.location),
+                original: originalText(entry.source, m.location),
                 replacement: m.replacement ?? '',
             });
         }
     }
     return out.sort((a, b) =>
-        a.file === b.file ? a.line - b.line || a.column - b.column : a.file < b.file ? -1 : 1,
+        a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line || a.column - b.column,
     );
 }
 
@@ -327,7 +324,7 @@ function changedLines(root, base) {
         const diff = execFileSync(
             'git',
             ['diff', '-U0', '--no-color', '--no-ext-diff', '--no-renames', '--diff-filter=AM', `${base}...HEAD`],
-            { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] },
+            { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
         );
         return parseDiff(diff);
     } catch (e) {
@@ -336,11 +333,11 @@ function changedLines(root, base) {
 }
 
 function listTests(root) {
+    // scripts/tests always exists: it holds this script's own tests.
     const dir = resolve(root, 'scripts/tests');
-    if (!existsSync(dir)) return [];
-    return readdirSync(dir)
-        .filter((n) => n.endsWith('.test.mjs'))
-        .map((n) => `scripts/tests/${n}`);
+    // groupFor only looks for scripts/tests/<name>.test.mjs, so other entries
+    // (fixtures, helpers) are harmless.
+    return readdirSync(dir).map((n) => `scripts/tests/${n}`);
 }
 
 function runStryker(root, bin, run) {
@@ -408,6 +405,6 @@ function main(argv) {
     if (fresh.length || untested.length) process.exit(1);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     main(process.argv.slice(2));
 }
