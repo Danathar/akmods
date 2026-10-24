@@ -94,11 +94,16 @@ export function startBudget(ms) {
  * twice, and the segments of both readings are returned: as written, where
  * the `(` opens a subshell (`!(cmd)` runs cmd when extglob is off), and with
  * each group read as `*` (see extglobAsStar()), since after `shopt -s extglob`
- * `/usr/bin/g@(i)t` is one word that runs git.
+ * `/usr/bin/g@(i)t` is one word that runs git. A group split by a
+ * backslash-newline (`g@\<newline>(i)t`) is read once more with the pair removed.
  */
 export function tokenize(input) {
     const segments = readSegments(input);
     if (EXTGLOB_OPEN.test(input)) segments.push(...readSegments(extglobAsStar(input)));
+    // The shell drops a backslash-newline before it reads a word, so
+    // `g@\<newline>(i)t` in a command string is the group `g@(i)t`.
+    const joined = input.replace(/\\\n/g, '');
+    if (joined !== input && EXTGLOB_OPEN.test(joined)) segments.push(...readSegments(extglobAsStar(joined)));
     return segments;
 }
 
