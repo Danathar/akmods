@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { globMatches } from '../shell-reader.mjs';
+import { globMatches, tokenize } from '../shell-reader.mjs';
 
 const HOOK = fileURLToPath(new URL('../guard-bash.mjs', import.meta.url));
 
@@ -1055,6 +1055,18 @@ test('globMatches reads * ? and bracket expressions as the shell does, in linear
     assert.equal(globMatches(`${'*'.repeat(64)}Z`, 'a'.repeat(64)), false);
     assert.equal(globMatches(`${'a*'.repeat(30)}b`, 'a'.repeat(200)), false);
     assert.ok(Date.now() - started < 1000, 'glob matching is not linear');
+});
+
+// The extra readings must not repeat: each reading is checked again, so a
+// duplicate costs time against the budget and hides which reading a rule saw.
+test('tokenize adds an extglob reading only for a group, and a joined one only for a split group', () => {
+    const words = (line) => tokenize(line).map((segment) => [...segment]);
+    assert.deepEqual(words('git status'), [['git', 'status']]);
+    assert.deepEqual(words('echo a\\\nb'), [['echo', 'ab']]);
+    assert.deepEqual(words('/usr/bin/g@(i)t diff'),
+        [['/usr/bin/g@'], ['i'], ['t', 'diff'], ['/usr/bin/g*t', 'diff']]);
+    assert.deepEqual(words("bash -c 'g@\\\n(i)t push'"),
+        [['bash', '-c', 'g@\\\n(i)t push'], ['bash', '-c', 'g*t push']]);
 });
 
 test('an internal error fails closed (exit 2), not open', () => {
