@@ -50,8 +50,8 @@ stop every other rule being edited away, and `.claude/settings.json` and
 **Tier 2, high: the signing and publishing path.** `Containerfile.in`
 (secret mounts, build stages), `build_files/prep/` (`build-prep.sh`,
 `dual-sign-check.sh`), `build_files/post/` (`build-post.sh`, `dual-sign.sh`),
-the ZFS scripts (authenticated OpenZFS release discovery, patches, kernel
-compat gate: fork patch T3, T1), the `Justfile` (push, manifest, secrets,
+the ZFS scripts (pinned OpenZFS release download and signature check,
+patches, kernel compat gate: fork patch T1), the `Justfile` (push, manifest, secrets,
 the P2 image-name lookup), `images.yaml` (P1 `org: danathar`, registry,
 names) and every workflow (several hold `packages: write`,
 `id-token: write`, `attestations: write`, and consume the signing secrets).

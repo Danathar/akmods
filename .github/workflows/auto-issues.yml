@@ -8,14 +8,11 @@ name: Auto issues
 #      old. The issue body is refreshed on every run with the current count.
 #   2. Stale FORK-PATCHES.md "Remove when" conditions that can be evaluated
 #      mechanically:
-#        T5 (`dnf install -y jq` in build-kmod-zfs.sh): removable once `jq` is
-#            in the unconditional RPMS_TO_INSTALL of build-prep.sh, here or
-#            upstream.
 #        T6 (`git` in build-prep.sh): removable once upstream installs `git`
 #            for every kernel flavor.
 #      tests/unit/fork_patches.bats asserts the patches are still PRESENT;
 #      these signals say when they have become REMOVABLE, so they do not
-#      duplicate it. The other entries' conditions (P1-P3, T1, T3, T4) are human judgement
+#      duplicate it. The other entries' conditions (P1-P3, T1, T4) are human judgement
 #      calls and are not checked.
 #
 # Upstream is read-only: only GET requests are made against ublue-os/akmods,
@@ -118,18 +115,7 @@ jobs:
           fi
 
           # --- Signal 2: FORK-PATCHES 'Remove when' conditions ----------------
-          fetch "$GH_REPO" "$PREP" fork-prep.sh
           fetch "$UPSTREAM" "$PREP" upstream-prep.sh
-
-          title='Fork patch T5 may be removable: jq is now installed unconditionally'
-          if unconditional_pkg jq fork-prep.sh || unconditional_pkg jq upstream-prep.sh; then
-            # shellcheck disable=SC2016
-            body=$(printf 'FORK-PATCHES.md T5 says: remove the `dnf install -y jq` in `build_files/zfs/build-kmod-zfs.sh` when `jq` is in the unconditional `RPMS_TO_INSTALL` of `%s`. It now is (here or in `%s`).\n\nCheck both copies, drop the `dnf install`, run a ZFS build in CI, then delete the T5 entry. Detected %s ([run](%s)).\n' \
-              "$PREP" "$UPSTREAM" "$(date -u +%Y-%m-%d)" "$run_url")
-            open_or_update "$title" fork-patches "$body"
-          else
-            close_if_open "$title" "jq is no longer installed unconditionally ($run_url). Closing."
-          fi
 
           title='Fork patch T6 may be removable: upstream installs git for all flavors'
           if unconditional_pkg git upstream-prep.sh; then

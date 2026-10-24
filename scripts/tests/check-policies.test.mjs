@@ -198,8 +198,6 @@ test('repo-target: upstream-owned files and AGENTS.md literal', () => {
 const GOOD_PATCHES = {
     'images.yaml': 'base: &b\n  org: danathar\n',
     Justfile: `akmods_name := env('AKMODS_IMAGE_NAME', shell(yq + ' ".images.$1[\\"$2\\"].$3.name" images.yaml'))\n`,
-    'Containerfile.in': '    --mount=type=secret,id=github_token \\\n',
-    'build_files/zfs/build-kmod-zfs.sh': 'curl_args+=(-H "Authorization: Bearer ${t}")\n',
     'build_files/prep/build-prep.sh': 'RPMS_TO_INSTALL+=(\n    git\n)\n',
 };
 
