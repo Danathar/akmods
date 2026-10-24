@@ -11,7 +11,7 @@ replacement for `ublue-os/akmods`.
 1. **Minimal delta from upstream.** Every difference is registered in [FORK-PATCHES.md](../FORK-PATCHES.md) with a
    reason and a remove-when. The goal is that `git merge upstream/main` stays mechanical. New capability goes in new
    fork-local files first; edits to upstream-owned files are a last resort.
-2. **Serve the consumer.** P1/P2 (namespace, image-name-from-config) are load-bearing for `zfs-aurora-complex`; T1/T3/T6
+2. **Serve the consumer.** P1/P2 (namespace, image-name-from-config) are load-bearing for `zfs-aurora-complex`; T1/T4/T6
    keep its ZFS build correct. A change that can't be justified by that consumer or by merge-friendliness doesn't belong.
 3. **Fail loudly.** Don't force a green build with the kernel-compat override, don't swallow rate-limit responses, don't
    fall back silently to the test key in scheduled builds.

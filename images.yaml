@@ -28,7 +28,6 @@ zfs:
   # upstream-compat signal. Only set this `true` as a deliberate, temporary,
   # documented exception -- never to make a red build go green.
   main:
-    minor_version: "2.4"
     linux_experimental: false
   coreos-testing:
     # renovate: datasource=github-releases depName=openzfs/zfs extractVersion=^zfs-(?<version>.+)$

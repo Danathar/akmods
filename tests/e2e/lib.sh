@@ -36,12 +36,3 @@ e2e_endstage() {
         echo "::endgroup::"
     fi
 }
-
-# Prints the release-discovery section of build-kmod-zfs.sh (from the xtrace
-# guard through the ZFS_VERSION validation); non-zero if the markers moved.
-e2e_extract_zfs_discovery() {
-    local out
-    out="$(sed -n '/^xtrace_was_enabled=0$/,/^echo "ZFS_CONFIGURE_ARGS==/p' "$1")"
-    [[ "${out}" == xtrace_was_enabled=0* && "${out}" == *'echo "ZFS_CONFIGURE_ARGS=='* ]] || return 1
-    printf '%s\n' "${out}"
-}

@@ -16,10 +16,9 @@ OCI images providing a set of cached kernel RPMs and extra kernel modules to Uni
 
 This is a personal fork of [`ublue-os/akmods`](https://github.com/ublue-os/akmods), kept in sync with upstream. It exists to feed [`zfs-aurora-complex`](https://github.com/Danathar/zfs-aurora-complex), which builds a signed Aurora DX image with ZFS kernel modules.
 
-`zfs-aurora-complex` doesn't consume a published image from here — its CI clones this repo's source at a resolved commit (by default it floats on this repo's `main`; it can pin to an exact commit in its own `ci/defaults.json` to freeze against an upstream regression or reproduce a past build) and builds the shared ZFS akmods cache directly from this repo's `Justfile` and `build_files/zfs` scripts. That means any commit pushed to this fork's `main` becomes the source for that repo's next build, so beyond mirroring upstream this fork carries a couple of load-bearing local patches:
+`zfs-aurora-complex` doesn't consume a published image from here — its CI clones this repo's source at a resolved commit (by default it floats on this repo's `main`; it can pin to an exact commit in its own `ci/defaults.json` to freeze against an upstream regression or reproduce a past build) and builds the shared ZFS akmods cache directly from this repo's `Justfile` and `build_files/zfs` scripts. That means any commit pushed to this fork's `main` becomes the source for that repo's next build, so beyond mirroring upstream this fork carries a load-bearing local patch:
 
 - `Justfile`: derive the published cache image name from `images.yaml`'s `.name` field (upstream hardcodes `akmods-<target>`), so the consuming repo controls the cache image name without patching the `Justfile` at build time
-- `build_files/zfs/build-kmod-zfs.sh`: hardened OpenZFS release discovery (GitHub token plumbing, xtrace/JSON-array guards) so the release lookup doesn't flake under CI
 
 See `zfs-aurora-complex`'s [`docs/akmods-fork-maintenance.md`](https://github.com/Danathar/zfs-aurora-complex/blob/main/docs/akmods-fork-maintenance.md) for the full sync and pin process.
 
