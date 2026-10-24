@@ -59,7 +59,11 @@ import format and applies as-is.
   | `policy-check` | `policy-check.yml` |
 
   All run on every pull request to `main` with no path filter, so no PR waits
-  on a check that never starts. `policies/ruleset.json` makes
+  on a check that never starts. The advisory
+  `Mutation check on changed lines (advisory)` job in `agent-tooling.yml` is
+  deliberately not required: it runs on pull requests only, is skipped for
+  upstream syncs and may report survivors on a change that is fine to merge
+  ([quality.md](quality.md#mutation-check-on-changed-lines)). `policies/ruleset.json` makes
   `node scripts/check-policies.mjs` fail if the file loses a rule or a check.
 - **Up-to-date branch** (`strict_required_status_checks_policy: true`): checks
   have run on what will actually land.

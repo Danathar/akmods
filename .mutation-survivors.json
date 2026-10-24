@@ -1,0 +1,4 @@
+{
+    "$comment": "Accepted survivors for scripts/mutation-check.mjs (#192): mutants on changed lines of .claude/hooks/*.mjs or scripts/*.mjs that no test kills because the change is equivalent (behaves the same) or is harmless over-refusal (the guard refuses more, never less). An entry matches on file, mutator, original and replacement text (whitespace collapsed), not on line number. Each entry needs a reason. The check prints a ready-made entry for every new survivor; add one only after deciding a test cannot or should not catch it. A survivor that lets the guard allow a command it should refuse is never accepted: add a test. See docs/quality.md.",
+    "survivors": []
+}

@@ -650,6 +650,9 @@ const blocked = [
     ["cat <<$'\\'' ; git push --force origin main", 'force push'],
     ["cat <<-$'\\'' ; git push --force origin main", 'force push'],
     ["cat <<$'\\x45OF'\nx\nEOF\nsudo ls", 'privilege escalation'],
+    // only a `$` starts a `$'...'` delimiter: `<<x'EOF'` is the delimiter
+    // `xEOF`, so bash ends the body there and runs the push after it (#192)
+    ["cat <<x'EOF'\nxEOF\ngit push --force origin main\nEOF", 'force push'],
     // with no command, distrobox-host-exec runs the host shell on its stdin
     ['distrobox-host-exec', 'no command'],
     ["echo 'sudo ls' | distrobox-host-exec", 'no command'],
