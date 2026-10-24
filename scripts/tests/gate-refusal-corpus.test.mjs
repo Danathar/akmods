@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const CORPUS_PATH = `${ROOT}tests/fixtures/gate-refusal-corpus.json`;
-const CORPUS_SHA256 = '05e29d13f2f2ca116e0f3137842184bf90a18add6ae48fe4c18b5b5e19ce3fd8';
+const CORPUS_SHA256 = '4de5c91334b06c013d0fa93430610301ea8d6844cb0531622b7a6164978b5fb3';
 const settings = JSON.parse(readFileSync(`${ROOT}.claude/settings.json`, 'utf8'));
 const raw = readFileSync(CORPUS_PATH);
 const corpus = JSON.parse(raw.toString('utf8'));
@@ -50,6 +50,7 @@ const KNOWN_GAPS = new Set([
     'name-extglob-bare',
     'unlisted-name-extglob',
     'name-extglob-command-string',
+    'name-continuation-extglob-string',
 ]);
 
 // The command prefix each wildcard Bash(...) allow rule covers. The fleet

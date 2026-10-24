@@ -930,6 +930,12 @@ const blocked = [
     ['setarch x86_64 g@(i)t push --force origin main', '`setarch` runs a command'],
     ['!(sudo id)', 'privilege escalation'],
     ['c@(d) sub && just --evaluate', 'directory change'],
+    // the shell drops a backslash-newline inside a group before it reads the word
+    ["bash -O extglob -c '/usr/bin/g@\\\n(i)t push --force origin main'", 'force'],
+    ["bash -O extglob -c 'g@\\\n(i)t push --force origin main'", 'force'],
+    ["bash -c 'shopt -s extglob\n/usr/bin/g@\\\n(i)t push --force origin main'", 'force'],
+    ["bash -O extglob -c 's@\\\n(u)do id'", 'privilege escalation'],
+    ["bash -O extglob -c 'gh@\\\n() pr merge 1'", 'merge'],
     // `NAME+=value` sets NAME for the command as `NAME=value` does
     ['GIT_EXTERNAL_DIFF+=x git diff', 'GIT_EXTERNAL_DIFF'],
     ['PAGER+=less git log', 'PAGER'],
