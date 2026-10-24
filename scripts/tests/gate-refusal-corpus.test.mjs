@@ -41,6 +41,15 @@ const KNOWN_GAPS = new Set([
     'later-line',
     'later-separator',
     'unlisted-script-command-string',
+    // Each spells git with a wildcard or an extended glob group in front of
+    // the plain two-operand `git diff /dev/null ./.env`, which is
+    // plain-file-two-operands above: the name is read, the command is allowed.
+    'name-bare-glob',
+    'unlisted-name-bare-glob',
+    'name-extglob-path',
+    'name-extglob-bare',
+    'unlisted-name-extglob',
+    'name-extglob-command-string',
 ]);
 
 // The command prefix each wildcard Bash(...) allow rule covers. The fleet
