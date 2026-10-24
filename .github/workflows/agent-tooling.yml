@@ -4,6 +4,11 @@ name: Agent tooling
 # **/*.test.mjs from the repo root): the Claude Code hooks under .claude/hooks/
 # tests and the helper scripts under scripts/tests. Other slices add test files
 # without touching this workflow. No path filter, so the check always reports.
+#
+# The `mutation` job is advisory (#192) and never a required check: on a pull
+# request it mutates the changed lines of .claude/hooks/*.mjs and scripts/*.mjs
+# with a pinned StrykerJS installed outside the checkout (the repository keeps
+# no package.json) and lists every mutant no test notices. See docs/quality.md.
 
 on:
   pull_request:
@@ -36,3 +41,29 @@ jobs:
 
       - name: Run node tests
         run: node --test
+
+  mutation:
+    name: Mutation check on changed lines (advisory)
+    if: "github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'chore: sync upstream')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Install Stryker (pinned, not saved)
+        run: npm install --prefix "$RUNNER_TEMP/stryker" --no-save --ignore-scripts --no-audit --no-fund @stryker-mutator/core@10.0.0
+
+      - name: Mutate changed lines
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/mutation-check.mjs --base "origin/$BASE_REF" --stryker "$RUNNER_TEMP/stryker/node_modules/.bin/stryker"

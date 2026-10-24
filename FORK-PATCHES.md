@@ -82,7 +82,8 @@ stated condition under which it should be deleted).
 ### P5 — Agent tooling, CI checks and governance (ACMM)
 
 - **Files:** new, fork-local: `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.editorconfig`,
-  `.shellcheckrc`, `.coverage-thresholds.json`, `risk-config.json`, `.claude/` (settings, guard hook, the
+  `.shellcheckrc`, `.coverage-thresholds.json`, `risk-config.json`, `stryker.config.mjs`,
+  `.mutation-survivors.json` (the advisory mutation check), `.claude/` (settings, guard hook, the
   shell reader it imports, their tests, memory, skills, session summary), `.cursor/rules/`,
   `.github/copilot-instructions.md`,
   `.github/prompts/`, `.github/labeler.yml`, `.github/auto-qa-tuning.json`, `.github/rulesets/main.json`,

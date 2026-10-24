@@ -65,6 +65,8 @@
       - any-glob-to-any-file:
           - 'tests/**'
           - 'scripts/tests/**'
+          - 'stryker.config.mjs'
+          - '.mutation-survivors.json'
 
 'area/ci':
   - changed-files:
