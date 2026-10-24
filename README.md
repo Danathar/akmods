@@ -16,10 +16,9 @@ OCI images providing a set of cached kernel RPMs and extra kernel modules to Uni
 
 This is a personal fork of [`ublue-os/akmods`](https://github.com/ublue-os/akmods), kept in sync with upstream. It exists to feed [`zfs-aurora-complex`](https://github.com/Danathar/zfs-aurora-complex), which builds a signed Aurora DX image with ZFS kernel modules.
 
-`zfs-aurora-complex` doesn't consume a published image from here — its CI clones this repo's source at a resolved commit (by default it floats on this repo's `main`; it can pin to an exact commit in its own `ci/defaults.json` to freeze against an upstream regression or reproduce a past build) and builds the shared ZFS akmods cache directly from this repo's `Justfile` and `build_files/zfs` scripts. That means any commit pushed to this fork's `main` becomes the source for that repo's next build, so beyond mirroring upstream this fork carries a couple of load-bearing local patches:
+`zfs-aurora-complex` doesn't consume a published image from here — its CI clones this repo's source at a resolved commit (by default it floats on this repo's `main`; it can pin to an exact commit in its own `ci/defaults.json` to freeze against an upstream regression or reproduce a past build) and builds the shared ZFS akmods cache directly from this repo's `Justfile` and `build_files/zfs` scripts. That means any commit pushed to this fork's `main` becomes the source for that repo's next build, so beyond mirroring upstream this fork carries a load-bearing local patch:
 
 - `Justfile`: derive the published cache image name from `images.yaml`'s `.name` field (upstream hardcodes `akmods-<target>`), so the consuming repo controls the cache image name without patching the `Justfile` at build time
-- `build_files/zfs/build-kmod-zfs.sh`: hardened OpenZFS release discovery (GitHub token plumbing, xtrace/JSON-array guards) so the release lookup doesn't flake under CI
 
 See `zfs-aurora-complex`'s [`docs/akmods-fork-maintenance.md`](https://github.com/Danathar/zfs-aurora-complex/blob/main/docs/akmods-fork-maintenance.md) for the full sync and pin process.
 
@@ -268,6 +267,8 @@ Since nothing additional was set. The following will occur. The build scripts wi
 - AKMODS_KERNEL - The kernel flavor you are building
 - AKMODS_VERSION - The release version
 - AKMODS_TARGET - The akmods package to build
+- ZFS_VERSION - Overrides `zfs.*.version` from `images.yaml` (a full `X.Y.Z`). `ZFS_MINOR_VERSION` is no longer read. Renovate manages the pin.
+- RPMFUSION_MIRROR - Optional base URL for an RPM Fusion mirror (for example `https://mirrors.ocf.berkeley.edu/rpmfusion`). When set, the build installs the rpmfusion release RPMs from it and points the rpmfusion repos at it instead of the metalink. When unset, the build uses `https://download1.rpmfusion.org` and the normal metalink. It can go in `.env`.
 
 ```bash
 AKMODS_KERNEL=longterm-6.18 AKMODS_VERSION=44 AKMODS_TARGET=zfs just build

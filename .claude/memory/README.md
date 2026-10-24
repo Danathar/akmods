@@ -65,5 +65,5 @@ the commit they were read at; `build-prep.sh`, `images.yaml` and
 | [dont-repoint-readme-refs-to-ghcr-danathar](dont-repoint-readme-refs-to-ghcr-danathar.md) | README `COPY --from` / `cosign verify` examples stay on `ghcr.io/ublue-os/...`; nothing is published under `ghcr.io/danathar/akmods` |
 | [dont-flip-linux-experimental-to-go-green](dont-flip-linux-experimental-to-go-green.md) | `zfs.main.linux_experimental: true` turns a red ZFS build green by disabling the kernel-compat gate |
 | [empty-kernel-privkey-writes-a-one-byte-key](empty-kernel-privkey-writes-a-one-byte-key.md) | With no `KERNEL_PRIVKEY` secret, scheduled/dispatch builds write a 1-byte key; the test-key fallback never fires, and a green PR check predicts nothing |
-| [main-flavor-zfs-needs-git-and-jq](main-flavor-zfs-needs-git-and-jq.md) | Upstream never builds ZFS on `main`, so its build env lacks what the ZFS script uses; `git` is T6, `jq` is T5 |
+| [main-flavor-zfs-needs-git-and-jq](main-flavor-zfs-needs-git-and-jq.md) | Upstream never builds ZFS on `main`, so its build env lacks what the ZFS script uses; `git` is T6 (`jq` was T5, retired 2026-10-24) |
 | [dont-drop-python3-cffi-as-dead-weight](dont-drop-python3-cffi-as-dead-weight.md) | T4's rationale was never recorded; verify with a full main ZFS build before removing it |

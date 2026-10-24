@@ -34,7 +34,7 @@ risk tiers are in [risk-tiers.md](risk-tiers.md), and agent rules in [AGENTS.md]
 11. **CI contract green.** `Lint (shellcheck)`, `Lint (actionlint)`, `Unit tests (bats)`, `E2E (fedora container)`,
     `Coverage gate`, `Agent tooling (node --test)`, `policy-check` — see [quality.md](quality.md).
 12. **Actions pinned** to full commit SHAs with a version comment; workflow `permissions:` least-privilege;
-    no `pull_request_target` with untrusted checkout; no secrets echoed (`set +x` around token handling, as in T3).
+    no `pull_request_target` with untrusted checkout; no secrets echoed (`set +x` around token handling).
 13. **Failure is loud.** New scripts fail with a clear message rather than producing an empty value
     (the `ZFS_VERSION` empty-string failure mode is the cautionary tale).
 14. **Docs in step.** Behaviour, patch, or workflow changes update the relevant doc in the same PR.

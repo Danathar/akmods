@@ -63,10 +63,10 @@ Entry format:
 - **Fork patches:** P1 (`org: danathar`), P2 (`akmods_name` from
   `images.yaml`, `AKMODS_IMAGE_NAME` override), P3 (README), P4 (Scorecard
   workflow), P5 (the ACMM agent tooling, CI and governance files), T1
-  (`zfs.main.linux_experimental: false`), T3 (authenticated OpenZFS release
-  lookup), T4 (`python3-cffi`), T5 (`jq`), T6 (`git`); T2 was retired
-  2026-07-30. All in [../FORK-PATCHES.md](../FORK-PATCHES.md). `tests/unit/`
-  pins P1, P2, P4 and T1–T6.
+  (`zfs.main.linux_experimental: false`), T4 (`python3-cffi`), T6 (`git`);
+  T2 was retired 2026-07-30, T3 (OpenZFS API release lookup) and T5 (`jq`)
+  on 2026-10-24 once upstream #618 pinned the full ZFS version. All in [../FORK-PATCHES.md](../FORK-PATCHES.md). `tests/unit/`
+  pins P1, P2, P4, P6, T1, T4 and T6.
 - **Build workflows:** `Build CENTOS|COREOS-STABLE|COREOS-TESTING|LONGTERM-6.18|MAIN|OGC
   akmods` and `Cleanup Old Images` are `disabled_manually`. Repository secrets:
   none, so a scheduled build would write a 1-byte signing key and fail in
