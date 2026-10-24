@@ -10,10 +10,10 @@ Classify the failure:
 
 - **Kernel too new:** `configure: error: *** Cannot build against kernel version X. *** The maximum supported
   kernel version is Y.` — the OpenZFS release does not support the kernel yet. Correct fixes: pin/wait for a
-  supported kernel or newer ZFS (`zfs.<flavor>.minor_version` in `images.yaml`). Do **not** set
+  supported kernel or newer ZFS (`zfs.<flavor>.version`, else `zfs.default.version`, in `images.yaml`). Do **not** set
   `linux_experimental: true` as a fix (see T1 in `FORK-PATCHES.md`).
-- **Release discovery:** empty `ZFS_VERSION`, "not a JSON array", or a rate-limit body — the GitHub API
-  lookup in `build_files/zfs/build-kmod-zfs.sh` (see T3); check the `github_token` secret is mounted.
+- **Version pin:** "ZFS_VERSION must be a full X.Y.Z release" or a 404 fetching `zfs-X.Y.Z.tar.gz` — check
+  the `zfs.*.version` pin in `images.yaml` (or a `ZFS_VERSION` override). The build makes no GitHub API call.
 - **`git: command not found` (127):** T6 — `git` missing in the build environment
   (`build_files/prep/build-prep.sh` `RPMS_TO_INSTALL`).
 - **Signing:** `OSSL_DECODER_from_bio ... Input type: PEM` in `fetch-kernel` — empty signing secret on a

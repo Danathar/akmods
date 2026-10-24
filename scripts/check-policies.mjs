@@ -14,7 +14,7 @@
  *                                         the two reusable build workflows
  *   2. policies/workflow-permissions.json trigger, permission and pin hygiene
  *   3. policies/repo-target.json          gh writes name Danathar/akmods
- *   4. policies/fork-patches.json         P1/P2/T3/T6 patches still present
+ *   4. policies/fork-patches.json         P1/P2/T6 patches still present
  *   5. policies/ruleset.json              .github/rulesets/main.json shape
  *   6. docs/risk-tiers.md vs risk-config.json: table drift, and every
  *      risk-config path matches a tracked file (except `pending` globs)

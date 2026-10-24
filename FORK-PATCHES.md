@@ -95,7 +95,7 @@ stated condition under which it should be deleted).
   One upstream-owned edit: `.gitignore` gains `.claude/settings.local.json`.
 - **What:** the test suite, CI checks, policy-as-code and agent directions added to close the ACMM
   issues #7–#52 (PRs #53–#58). The required checks that guard `main` (ruleset `24902471`, see
-  `docs/branch-protection.md`) come from these workflows. `tests/unit/` pins P1, P2, P4 and T1–T6, so
+  `docs/branch-protection.md`) come from these workflows. `tests/unit/` pins P1, P2, P4, P6, T1, T4 and T6, so
   an upstream merge that silently reverts one of them now fails CI instead of reaching
   `zfs-aurora-complex`.
 - **Why:** the repository is worked by Hive agents; these files are their directions and the gates
@@ -134,8 +134,10 @@ stated condition under which it should be deleted).
 ### T1 — `zfs.main` block pinning the kernel-compatibility gate
 
 - **Files:** `images.yaml` (`zfs.main`)
-- **What:** an explicit `zfs.main` block setting `minor_version: "2.4"` and
-  `linux_experimental: false`. Upstream has no `zfs.main` key at all.
+- **What:** an explicit `zfs.main` block setting `linux_experimental: false`. Upstream has no
+  `zfs.main` key at all. (It also carried `minor_version: "2.4"` until 2026-10-24; upstream #618
+  replaced the minor-version lookup with a full `version` pin, and `main` now takes
+  `zfs.default.version`.)
 - **Why it is not redundant:** the values are identical to `zfs.default`, so this is *behaviourally* a
   no-op — it exists to carry a warning at the point of temptation. `zfs-aurora-complex` injects its own
   `images.<ver>.main.zfs` target at build time and the `Justfile` reads `.zfs.main.linux_experimental`
@@ -174,28 +176,21 @@ from this repo's *source* on every run, and publishing a prebuilt cache here loo
 saving. It was dropped because that consumer builds fine without it, and an unconsumed daily image is
 pure cost. If you revisit it, the build itself is proven to work — see run 30206124460.
 
-### T3 — Hardened OpenZFS release discovery
+### T3 — *(retired 2026-10-24)* Hardened OpenZFS release discovery
 
-- **Files:** `build_files/zfs/build-kmod-zfs.sh`, `Justfile` (`build`, `test` — `SECRETS` array),
-  `Containerfile.in` (`--mount=type=secret,id=github_token` on the ZFS build step)
-- **What:** four changes to the unauthenticated `curl` upstream uses against
-  `api.github.com/repos/openzfs/zfs/releases`:
-  1. sends `Authorization: Bearer` when `GITHUB_TOKEN`/`GH_TOKEN`/`/run/secrets/github_token` is present;
-  2. disables `xtrace` around token handling so CI's `set -x` cannot echo the token into the job log;
-  3. asserts the response is a JSON array before parsing, and prints the body on failure;
-  4. fails loudly when no release matches `zfs-<minor>` instead of silently producing an empty version.
+This fork hardened upstream's unauthenticated `curl` against `api.github.com/repos/openzfs/zfs/releases`
+in `build_files/zfs/build-kmod-zfs.sh`: a `Bearer` token from `GITHUB_TOKEN`/`GH_TOKEN`/
+`/run/secrets/github_token`, `xtrace` off around token handling, a JSON-array check on the response, and
+a loud failure when no `zfs-<minor>` release matched. The token reached the build through a `SECRETS`
+array in the `Justfile` `build` and `test` recipes and a `--mount=type=secret,id=github_token` on the ZFS
+step of `Containerfile.in`.
 
-  Upstream's #590 (merged here in the #59 sync) added its own `CURL` array with
-  `--retry 5 --retry-delay 5 --retry-all-errors` and rewrote the same lines. That collides with this
-  patch. The conflict was resolved by keeping all four changes above, adding upstream's retry flags to
-  `curl_args`, and defining upstream's `CURL` array just above the xtrace guard, because the tarball
-  and signature downloads further down use it.
-- **Why:** the anonymous GitHub API allows 60 requests/hour per IP. On shared CI runners that budget is
-  routinely exhausted, and the API then returns a rate-limit *object* rather than an array. Upstream's
-  `jq` then yields an empty `ZFS_VERSION` and the build fails much later with a confusing error.
-- **Remove when:** upstream adopts an authenticated or non-API release lookup. Until then this must be
-  carried forward as a unit — the `Justfile` secret plumbing and the `Containerfile.in` secret mount are
-  useless without the script change, and vice versa.
+Its remove-when condition ("upstream adopts an authenticated or non-API release lookup") was met by
+upstream #618 (merged here in the #198 sync): the script now takes a full `X.Y.Z` `ZFS_VERSION` from
+`zfs.*.version` in `images.yaml` and makes no API call. The merge took upstream's script; the
+`Justfile`/`Containerfile.in` secret plumbing, the `T3-*` rules in `policies/fork-patches.json`, its bats
+tests (`zfs_release_discovery.bats`, `github_token_plumbing.bats`) and the live-API stage of
+`tests/e2e/run.sh` were removed with it. Those two files now match upstream apart from P2.
 
 ### T4 — `python3-cffi` in the build environment
 
@@ -208,16 +203,13 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
 - **Remove when:** upstream installs `python-cffi` on the `main` flavor, or a full `main` ZFS build is
   shown to work without it. Do not drop it on the assumption it is dead weight.
 
-### T5 — `dnf install -y jq` inside the ZFS build step
+### T5 — *(retired 2026-10-24)* `dnf install -y jq` inside the ZFS build step
 
-- **Files:** `build_files/zfs/build-kmod-zfs.sh`
-- **What:** installs `jq` before parsing the release JSON.
-- **Why:** upstream's script assumes `jq` is present. Upstream's `build-prep.sh` does install it, but
-  only for its own ZFS flavors, so it is missing on `main`. See
-  [ZFS build tools on the `main` flavor](#zfs-build-tools-on-the-main-flavor).
-- **Remove when:** `jq` is installed on the `main` flavor by `build_files/prep/build-prep.sh`, for example
-  in the unconditional `RPMS_TO_INSTALL` block, upstream or here. Upstream's flavor-gated `jq` entry
-  does not count: it already exists and does not reach `main`.
+`build_files/zfs/build-kmod-zfs.sh` installed `jq` to parse T3's release JSON, because upstream's
+`build-prep.sh` only installs `jq` for its own ZFS flavors and `main` never got it. Since upstream #618
+the script parses no JSON, so `main` no longer needs `jq` for a ZFS build. The `dnf install` went away
+with upstream's script in the #198 sync; the T5 test, the T5 check in `tests/unit/zfs_flavor_deps.bats`
+(`jq` is now `absent` there) and the T5 signal in `.github/workflows/auto-issues.yml` were removed.
 
 ### T6 — `git` in the build environment
 
@@ -227,29 +219,30 @@ pure cost. If you revisit it, the build itself is proven to work — see run 302
   `build-prep.sh` only installs `git` when `KERNEL_FLAVOR` matches `coreos|longterm`. Upstream
   never builds ZFS on the `main` flavor, so upstream never needs it there; this fork does, and the
   build died with `git: command not found` (exit 127) on the first run after the merge. Same root
-  cause as T4 and T5; see [ZFS build tools on the `main` flavor](#zfs-build-tools-on-the-main-flavor).
+  cause as T4 (and the retired T5); see [ZFS build tools on the `main` flavor](#zfs-build-tools-on-the-main-flavor).
 - **Remove when:** upstream installs `git` for all flavors, stops using `git apply` (the patch block
   is guarded to ZFS 2.4.3 and disappears once 2.4.4 ships), or starts building ZFS on `main` itself.
 
 
 ### ZFS build tools on the `main` flavor
 
-Not a patch: the shared root cause of T4, T5 and T6, written down so the next instance is caught at the
+Not a patch: the shared root cause of T4 and T6 (and the retired T5), written down so the next instance is caught at the
 upstream merge rather than in `zfs-aurora-complex`'s build.
 
 Upstream's `build_files/prep/build-prep.sh` installs the tools a ZFS build needs (`autoconf`,
 `automake`, `dkms`, `git`, `jq`, `libtool`, `ncompress`, `python-cffi`) only inside
 `if [[ "${KERNEL_FLAVOR}" =~ "coreos" ]] || [[ "${KERNEL_FLAVOR}" =~ "longterm" ]]`, the flavors upstream builds ZFS
 on. This fork also builds ZFS on `main` (the target `zfs-aurora-complex` injects, see P2), which never
-enters that block. `main` gets `python-cffi` (T4), `jq` (T5) and `git` (T6) from patches. It has never
-installed the other five, and its ZFS builds succeed without them.
+enters that block. `main` gets `python-cffi` (T4) and `git` (T6) from patches. It does not install the
+other six (`jq` came from T5 until the ZFS script stopped parsing JSON), and its ZFS builds succeed
+without them.
 
 This fork's workflows build no images, so when upstream adds a tool to that list nothing here fails;
 T6 was found as `git: command not found` in a consumer build. `tests/unit/zfs_flavor_deps.bats` now
 fails when the list changes, or when `main` starts entering the block. When it fails during an
 upstream merge, decide for each new package whether `main` needs it. If it does, add a T patch. Then
 update the test's reviewed list and the list above. If upstream starts installing these tools on
-`main`, T4 to T6 can go.
+`main`, T4 and T6 can go.
 
 ---
 

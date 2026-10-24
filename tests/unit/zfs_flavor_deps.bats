@@ -3,7 +3,7 @@
 # inside a KERNEL_FLAVOR check (coreos, longterm). This fork also builds
 # ZFS on `main` (the target zfs-aurora-complex injects, see P2), which never
 # enters that block, so the tools the main-flavor build needs are carried by
-# their own patches (T4, T5, T6). Nothing else notices when upstream changes the
+# their own patches (T4, T6). Nothing else notices when upstream changes the
 # list: this fork's workflows build no images, so the first failure would be a
 # red cache build in zfs-aurora-complex (how T6 was found). These tests fail at
 # the upstream merge instead. See FORK-PATCHES.md, "ZFS build tools on the main
@@ -12,15 +12,16 @@
 load helpers
 
 # Each package in upstream's flavor-gated ZFS list and how the main-flavor ZFS
-# build gets it: a patch id, or "absent" when main has never installed it and
-# its ZFS builds succeed without it.
+# build gets it: a patch id, or "absent" when main does not install it and its
+# ZFS builds succeed without it. jq was T5 until upstream's #618 pinned the full
+# ZFS version and the build script stopped parsing release JSON.
 reviewed_main_flavor_sources() {
     cat <<'EOF'
 autoconf absent
 automake absent
 dkms absent
 git T6
-jq T5
+jq absent
 libtool absent
 ncompress absent
 python-cffi T4
@@ -44,12 +45,12 @@ flavor_gated_packages() {
     ' "${REPO_ROOT}/build_files/prep/build-prep.sh"
 }
 
-# covers: T4, T5, T6
-@test "T4-T6: upstream's flavor-gated ZFS package list is the one reviewed for main" {
+# covers: T4, T6
+@test "T4, T6: upstream's flavor-gated ZFS package list is the one reviewed for main" {
     run flavor_gated_packages
     [ "${status}" -eq 0 ]
     [ -n "${output}" ] || {
-        echo "flavor-gated RPMS_TO_INSTALL block not found in build-prep.sh; re-review T4-T6" >&2
+        echo "flavor-gated RPMS_TO_INSTALL block not found in build-prep.sh; re-review T4 and T6" >&2
         return 1
     }
     local found reviewed
@@ -64,8 +65,8 @@ flavor_gated_packages() {
     }
 }
 
-# covers: T4, T5, T6
-@test "T4-T6: the main flavor still skips the flavor-gated block" {
+# covers: T4, T6
+@test "T4, T6: the main flavor still skips the flavor-gated block" {
     run flavor_gate_line
     [ "${status}" -eq 0 ]
     local gate="${output}"
@@ -74,13 +75,13 @@ flavor_gated_packages() {
     [ "${status}" -eq 0 ]
     run env KERNEL_FLAVOR=main bash -c "${gate} exit 1; fi; exit 0"
     [ "${status}" -eq 0 ] || {
-        echo "Upstream now installs its ZFS build tools on main: T4, T5 and T6 may be redundant." >&2
+        echo "Upstream now installs its ZFS build tools on main: T4 and T6 may be redundant." >&2
         return 1
     }
 }
 
-# covers: T4, T5, T6
-@test "T4-T6: every package main needs from the gated list is still provided" {
+# covers: T4, T6
+@test "T4, T6: every package main needs from the gated list is still provided" {
     local unconditional
     unconditional="$(awk '/^RPMS_TO_INSTALL\+=\($/{f=1;next} f&&/^\)$/{exit} f{print $1}' \
         "${REPO_ROOT}/build_files/prep/build-prep.sh")"
@@ -89,7 +90,6 @@ flavor_gated_packages() {
         case "${source}" in
             absent) ;;
             T4) grep -qx 'python3-cffi' <<<"${unconditional}" ;;
-            T5) grep -qx 'dnf install -y jq' "${REPO_ROOT}/build_files/zfs/build-kmod-zfs.sh" ;;
             T6) grep -qx 'git' <<<"${unconditional}" ;;
             *)
                 echo "${pkg}: unknown source ${source}" >&2

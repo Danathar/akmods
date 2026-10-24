@@ -8,10 +8,7 @@
 #      the real Justfile (check_valid, org, registry, image name) and an invalid
 #      combination is rejected;
 #   3. `just generate-workflows` reproduces the committed build-akmods-*.yml
-#      (modulo the random cron minute) and is deterministic;
-#   4. T3's OpenZFS release discovery works against the live GitHub API
-#      (authenticated when GITHUB_TOKEN/GH_TOKEN is set) and fails loudly for a
-#      release line that does not exist.
+#      (modulo the random cron minute) and is deterministic.
 #
 # SAFETY: this script installs packages (dnf) and writes /usr/local/bin, so it
 # refuses to run anywhere that is not a container. Do not bypass the guard on a
@@ -61,7 +58,7 @@ printf '#!/bin/sh\necho "stub podman invoked: $*" >&2\nexit 99\n' >"${SCRATCH}/s
 chmod +x "${SCRATCH}/stubs/podman"
 export PATH="${SCRATCH}/stubs:${PATH}"
 export AKMODS_BUILDDIR="${SCRATCH}/build"
-unset AKMODS_IMAGE_NAME AKMODS_KERNEL AKMODS_VERSION AKMODS_TARGET AKMODS_REGISTRY AKMODS_TRANSPORT ZFS_MINOR_VERSION ZFS_CONFIGURE_ARGS
+unset AKMODS_IMAGE_NAME AKMODS_KERNEL AKMODS_VERSION AKMODS_TARGET AKMODS_REGISTRY AKMODS_TRANSPORT ZFS_VERSION ZFS_CONFIGURE_ARGS
 
 # Scratch copy so recipes that write relative to the repo (generate-workflows
 # deletes and rewrites .github/workflows/build*.yml) cannot touch the checkout.
@@ -142,42 +139,6 @@ for generated in "${WORK}"/.github/workflows/build-akmods-*.yml; do
         e2e_fail "${name} differs between two generations"
     fi
 done
-e2e_endstage
-
-# --- 4. live OpenZFS release discovery (T3) -------------------------------------
-e2e_stage "OpenZFS release discovery against the live GitHub API"
-snippet="${SCRATCH}/discovery.sh"
-run_discovery() { # $1 = minor version; prints combined output, returns exit status
-    {
-        printf 'set -euo pipefail\nZFS_MINOR_VERSION=%q\nZFS_CONFIGURE_ARGS=\n' "$1"
-        e2e_extract_zfs_discovery "${REPO_ROOT}/build_files/zfs/build-kmod-zfs.sh"
-    } >"${snippet}"
-    mkdir -p "${SCRATCH}/cwd"
-    (cd "${SCRATCH}/cwd" && bash "${snippet}" 2>&1)
-}
-if [[ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]]; then
-    echo "using an authenticated request (token present, value not printed)"
-else
-    echo "no token in the environment: using an anonymous request"
-fi
-minor="$(yqf '.zfs.default.minor_version' "${WORK}/images.yaml")"
-if out="$(run_discovery "${minor}")"; then
-    version="$(sed -n 's/^ZFS_VERSION==//p' <<<"${out}")"
-    if [[ "${version}" =~ ^${minor//./\\.}\.[0-9]+$ ]]; then
-        e2e_ok "discovered ZFS ${version} for the ${minor} line"
-    else
-        e2e_fail "discovery succeeded but returned '${version}'"
-    fi
-else
-    e2e_fail "discovery failed for ${minor}: ${out}"
-fi
-if out="$(run_discovery 99.99)"; then
-    e2e_fail "discovery of a nonexistent release line unexpectedly succeeded"
-elif [[ "${out}" == *"No non-draft, non-prerelease OpenZFS release found for zfs-99.99."* ]]; then
-    e2e_ok "a nonexistent release line fails loudly"
-else
-    e2e_fail "a nonexistent release line failed with an unexpected message: ${out}"
-fi
 e2e_endstage
 
 echo

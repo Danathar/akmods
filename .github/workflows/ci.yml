@@ -111,6 +111,4 @@ jobs:
 
       - name: Run end-to-end tests
         # No kernel download and no akmod build; see the header of tests/e2e/run.sh.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash tests/e2e/run.sh

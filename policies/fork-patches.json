@@ -21,18 +21,6 @@
             "message": "Justfile akmods_name must default to the name in images.yaml (FORK-PATCHES.md P2)"
         },
         {
-            "id": "T3-secret-mount",
-            "file": "Containerfile.in",
-            "mustMatch": "--mount=type=secret,id=github_token",
-            "message": "Containerfile.in must mount the github_token secret for authenticated ZFS release discovery (FORK-PATCHES.md T3)"
-        },
-        {
-            "id": "T3-authenticated-discovery",
-            "file": "build_files/zfs/build-kmod-zfs.sh",
-            "mustMatch": "Authorization: Bearer",
-            "message": "build-kmod-zfs.sh must send an authenticated request when discovering OpenZFS releases (FORK-PATCHES.md T3)"
-        },
-        {
             "id": "T6-git",
             "file": "build_files/prep/build-prep.sh",
             "mustMatch": "^\\s+git\\s*$",

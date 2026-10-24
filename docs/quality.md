@@ -16,7 +16,7 @@ tooling* are sound; it does **not** prove a real kernel/akmod build works. Real 
 |---|---|---|---|
 | `Lint (shellcheck)` | `.github/workflows/ci.yml` | Shell in `build_files/`, `fetch-kernel.sh`, scripts has a defect. | Run `shellcheck` locally on the named file. |
 | `Lint (actionlint)` | `ci.yml` | Workflow syntax / expression / pinning problem. | `actionlint` locally. |
-| `Unit tests (bats)` | `ci.yml` | Behaviour of a shell function regressed (e.g. ZFS release discovery, P2 name lookup). | `npx --yes bats@1.11.1 tests/unit`. |
+| `Unit tests (bats)` | `ci.yml` | Behaviour of a shell function regressed (e.g. the ZFS configure-argument gate, P2 name lookup). | `npx --yes bats@1.11.1 tests/unit`. |
 | `E2E (fedora container)` | `ci.yml` | Scripts fail in a real Fedora userland (missing `git`/`jq`-class gaps). | Read the job log; reproduce with `tests/e2e/run.sh` **in CI only** on shared hosts. |
 | `Coverage gate` | `coverage-gate.yml` | Test coverage fell under `.coverage-thresholds.json`. | Add tests; never lower the threshold to pass. |
 | `Agent tooling (node --test)` | `agent-tooling.yml` | A Node script or hook (`scripts/`, `.claude/hooks/`) is broken. | `node --test`. |
@@ -61,7 +61,7 @@ unpinned everywhere. The `mutation` job in `agent-tooling.yml` does that audit o
 ## Reading them together
 
 1. **Required checks red** → fix before anything else; do not merge around them.
-2. **All green but the change touches P1/P2/T1/T3/T6 or signing** → green is necessary, not sufficient: confirm by the
+2. **All green but the change touches P1/P2/T1/T4/T6 or signing** → green is necessary, not sufficient: confirm by the
    [rubric](review-rubric.md), and note that the consumer repo is the real end-to-end test.
 3. **Metrics trending badly** (acceptance down, p90 TTM up, any revert) → look for a recurring rubric item agents miss and
    fix it at the source (AGENTS.md, a policy, or a test).

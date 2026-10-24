@@ -112,22 +112,6 @@ setup() {
     [[ "${output}" == *python3-cffi* ]]
 }
 
-# covers: T5
-@test "T5: the ZFS build installs jq before parsing release JSON" {
-    run grep -n -E '^dnf install -y jq$|jq -' "${REPO_ROOT}/build_files/zfs/build-kmod-zfs.sh"
-    [ "${status}" -eq 0 ]
-    [[ "${lines[0]}" == *"dnf install -y jq" ]]
-}
-
-# covers: T3
-@test "T3: Justfile and Containerfile.in still plumb the github_token secret" {
-    run grep -c 'github_token' "${REPO_ROOT}/Justfile"
-    [ "${status}" -eq 0 ]
-    [ "${output}" -ge 2 ]
-    run grep -F 'id=github_token' "${REPO_ROOT}/Containerfile.in"
-    [ "${status}" -eq 0 ]
-}
-
 # covers: P4
 @test "P4: scorecard workflow and summary script exist" {
     [ -f "${REPO_ROOT}/.github/workflows/scorecard.yml" ]

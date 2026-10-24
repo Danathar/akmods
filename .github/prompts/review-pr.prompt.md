@@ -12,7 +12,7 @@ Check, in order:
    existing workflows, `README.md`) unnecessarily?
 2. **Consumer impact:** could it break `Danathar/zfs-aurora-complex`? Especially `akmods_name` (P2), the
    `main.zfs` target, `linux_experimental` (T1; flipping to `true` to fix a red build is wrong) and
-   `build_files/zfs/build-kmod-zfs.sh` (T3).
+   `build_files/zfs/build-kmod-zfs.sh`.
 3. **Generated files:** `.github/workflows/build-akmods-*.yml` must match `just generate-workflows` output
    from `workflow-templates/` and `images.yaml`; no hand edits.
 4. **Safety:** actions pinned to full SHAs, minimal `permissions`, no secrets echoed (watch `set -x`), no
