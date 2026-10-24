@@ -24,12 +24,12 @@ On a shared workstation do not run `just build|fetch-kernel|push` or containers 
   supports it. **Do not** set `zfs.main.linux_experimental: true` to go green (T1): it silently builds an unvalidated
   module on the next bump.
 
-### 3. ZFS release discovery: empty `ZFS_VERSION` / "response was not a JSON array"
-- **Diagnosis:** anonymous GitHub API is limited to 60 req/h per IP; shared runners exhaust it and the API returns a
-  rate-limit object. T3 detects it and prints the body.
-- **Action:** make sure `GITHUB_TOKEN`/`GH_TOKEN` reaches the build — Justfile `SECRETS` array, `Containerfile.in`
-  `--mount=type=secret,id=github_token`. Retry later if it was a one-off. If T3 was lost in an upstream merge, restore
-  it as a unit (script + Justfile + Containerfile.in).
+### 3. ZFS version pin: "ZFS_VERSION must be a full X.Y.Z release" / 404 fetching the ZFS tarball
+- **Diagnosis:** `build-kmod-zfs.sh` takes a full OpenZFS release from `zfs.<flavor>.version` (else
+  `zfs.default.version`) in `images.yaml`, or a `ZFS_VERSION` override. It no longer queries the GitHub API
+  (upstream #618), so the old rate-limit failure and its fork patch (T3, retired) are gone.
+- **Action:** check the pin is `X.Y.Z` and that `zfs-X.Y.Z` exists on the OpenZFS releases page. Renovate manages
+  the pin.
 
 ### 4. `curl (18) end of response with ... bytes missing` from kojipkgs
 - **Diagnosis:** transient truncation downloading kernel RPMs from `kojipkgs.fedoraproject.org`; the reason the

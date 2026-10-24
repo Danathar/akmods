@@ -167,8 +167,6 @@ jobs:
           persist-credentials: false
 
       - name: Run end-to-end tests
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash tests/e2e/run.sh
 
   report:

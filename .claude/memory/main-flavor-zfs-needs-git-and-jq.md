@@ -6,8 +6,9 @@ build environment has what it uses. Upstream never builds ZFS on `main`, so it
 never needed to install them there.
 **Right:** `build-prep.sh` installs `git` for every flavor only because of this
 fork (T6, the first `RPMS_TO_INSTALL` list); upstream installs `git` and `jq`
-only in its `coreos|longterm` block. `jq` for the main flavor comes from T5's
-`dnf install -y jq` inside `build-kmod-zfs.sh`. After every upstream merge,
+only in its `coreos|longterm` block. `jq` for the main flavor came from T5's
+`dnf install -y jq` inside `build-kmod-zfs.sh`; T5 was retired 2026-10-24 when
+upstream #618 pinned the full ZFS version and the script stopped parsing JSON. After every upstream merge,
 check that whatever new tool `build_files/zfs/build-kmod-zfs.sh` calls is
 installed for the `main` flavor too. `tests/unit/zfs_flavor_deps.bats` fails
 when upstream's gated package list changes.
