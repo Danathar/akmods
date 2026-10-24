@@ -435,7 +435,14 @@ export function closeParen(input, j) {
     return j;
 }
 
-/** Parse `<<[-]['"]DELIM['"]` at input[i]; returns { delim, quoted, next } (next = index after it). */
+/**
+ * Parse `<<[-]['"]DELIM['"]` (or `<<[-]$'DELIM'`) at input[i]; returns
+ * { delim, quoted, next } (next = index after it).
+ *
+ * A `$'...'` part of the delimiter is decoded as bash decodes it, so
+ * `<<$'\x45OF'` ends at the line `EOF`, and `<<$'\''` is the one-character
+ * delimiter `'` with the rest of the line read as the command line bash runs.
+ */
 export function readHeredocStart(input, i) {
     i += 2;
     if (input[i] === '-') i++;
@@ -448,6 +455,11 @@ export function readHeredocStart(input, i) {
         if (quote) {
             if (d === quote) quote = null;
             else delim += d;
+        } else if (d === '$' && input[i + 1] === "'") {
+            const { text, next } = readAnsiC(input, i + 2);
+            delim += text;
+            quoted = true;
+            i = next - 1;
         } else if (d === "'" || d === '"') {
             quote = d;
             quoted = true;
