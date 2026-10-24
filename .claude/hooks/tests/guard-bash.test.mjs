@@ -178,6 +178,9 @@ const allowed = [
     'openssl x509 -in certs/public_key.der.test -inform DER -noout -text',
     // a backslash-quoted heredoc delimiter keeps the body literal
     'cat <<\\EOF\n$(sudo ls)\nEOF',
+    // and so does a `$'...'` one, decoded the way bash decodes it (#188)
+    "cat <<$'EOF'\n$(sudo ls)\nEOF",
+    "cat <<-$'EOF'\n\t$(sudo ls)\n\tEOF",
     // L1: reading and linting options stay pre-approved
     'actionlint -shellcheck= .github/workflows/ci.yml',
     'actionlint -color -oneline',
@@ -621,6 +624,11 @@ const blocked = [
     ['cat <<\\EOF\nx\nEOF\nsudo ls', 'privilege escalation'],
     ['cat <<E\\OF\nx\nEOF\nsudo ls', 'privilege escalation'],
     ['cat <<-\\EOF\n\tx\n\tEOF\nsudo ls', 'privilege escalation'],
+    // a `$'...'` heredoc delimiter is decoded, and `\'` does not end it: `<<$'\''`
+    // is the delimiter `'`, so the rest of the line is a command bash runs (#188)
+    ["cat <<$'\\'' ; git push --force origin main", 'force push'],
+    ["cat <<-$'\\'' ; git push --force origin main", 'force push'],
+    ["cat <<$'\\x45OF'\nx\nEOF\nsudo ls", 'privilege escalation'],
     // with no command, distrobox-host-exec runs the host shell on its stdin
     ['distrobox-host-exec', 'no command'],
     ["echo 'sudo ls' | distrobox-host-exec", 'no command'],
