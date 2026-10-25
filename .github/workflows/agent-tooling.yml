@@ -66,4 +66,7 @@ jobs:
       - name: Mutate changed lines
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: node scripts/mutation-check.mjs --base "origin/$BASE_REF" --stryker "$RUNNER_TEMP/stryker/node_modules/.bin/stryker"
+        # The budget ends the run on its own well before timeout-minutes, which
+        # stays as a backstop: a job cut off by its timeout reports `cancelled`,
+        # and that blocks the merge even with continue-on-error (#216).
+        run: node scripts/mutation-check.mjs --base "origin/$BASE_REF" --stryker "$RUNNER_TEMP/stryker/node_modules/.bin/stryker" --budget-minutes 35

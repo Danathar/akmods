@@ -15,6 +15,7 @@ import {
     HASH_PIN_TESTS,
     HOOK_TESTS,
     LEDGER,
+    budgetNotice,
     evaluate,
     formatSurvivor,
     groupFor,
@@ -517,6 +518,35 @@ test('summarize lists new survivors with ledger entries, and untested scripts', 
     assert.doesNotMatch(summarize([], [], ['scripts/x.mjs']), /```json/);
 });
 
+test('budgetNotice names the budget, the group that was cut off and the groups never started', () => {
+    assert.equal(
+        budgetNotice({ minutes: 35, cut: null, skipped: [] }),
+        'mutation run stopped at its time budget (35 min); results are incomplete',
+    );
+    assert.equal(
+        budgetNotice({ minutes: 35, cut: 'hooks', skipped: ['scripts-a', 'scripts-b'] }),
+        'mutation run stopped at its time budget (35 min); results are incomplete: ' +
+            'hooks was cut off and none of its mutants are counted; scripts-a, scripts-b not run',
+    );
+    assert.equal(
+        budgetNotice({ minutes: 0.5, cut: null, skipped: ['scripts-a'] }),
+        'mutation run stopped at its time budget (0.5 min); results are incomplete: scripts-a not run',
+    );
+});
+
+test('summarize says the results are incomplete when the budget stopped the run', () => {
+    const stopped = { minutes: 35, cut: 'hooks', skipped: [] };
+    const none = summarize([], [], [], stopped);
+    assert.ok(none.startsWith('## Mutation check on changed lines (advisory)\n\n**mutation run stopped at'), none);
+    assert.match(none, /results are incomplete: hooks was cut off/);
+    assert.match(none, /No new surviving mutants among those that ran \(0 accepted in the ledger\)\./);
+    assert.doesNotMatch(none, /No new surviving mutants \(/);
+    const some = summarize([SURVIVOR], [], [], stopped);
+    assert.match(some, /results are incomplete/);
+    assert.match(some, /1 mutant\(s\) on changed lines survived/);
+    assert.equal(summarize([SURVIVOR], [], [], null), summarize([SURVIVOR], []));
+});
+
 // ------------------------------------------------------------ the CLI, end to end
 
 function layout(files) {
@@ -651,6 +681,14 @@ test('exits 2 on a malformed ledger, a missing report and bad arguments', () => 
         const noStryker = run(['--stryker', '--dry-run'], dir);
         assert.equal(noStryker.status, 2);
         assert.match(noStryker.stderr, /--stryker needs a value/);
+        const noBudget = run(['--budget-minutes'], dir);
+        assert.equal(noBudget.status, 2);
+        assert.match(noBudget.stderr, /--budget-minutes needs a value/);
+        for (const bad of ['0', 'abc', '1e3', '0.0', '1.']) {
+            const r = run(['--budget-minutes', bad, '--dry-run'], dir);
+            assert.equal(r.status, 2, bad);
+            assert.match(r.stderr, new RegExp(`--budget-minutes needs a positive number of minutes, got ${bad}`));
+        }
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
@@ -854,6 +892,141 @@ test('exits 2 when Stryker fails or writes an unreadable report', () => {
         const broken = strykerRun(dir, 'broken');
         assert.equal(broken.status, 2);
         assert.match(broken.stderr, /cannot read Stryker report .*scripts-tool\.json: /);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+// ------------------------------------------------------------ the time budget (#216)
+
+// A stand-in for Stryker that logs each start. For the group named in
+// FAKE_HANG it starts a child process of its own (as Stryker starts the test
+// processes), records that child's pid and then never finishes; every other
+// group writes a report with one survivor and exits.
+const FAKE_BUDGET_STRYKER = `
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { dirname } from 'node:path';
+const name = process.env.MUTATION_REPORT.split('/').pop().replace('.json', '');
+appendFileSync('stryker-starts.log', name + '\\n');
+if (name === process.env.FAKE_HANG) {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    writeFileSync('child.pid', String(child.pid));
+    setInterval(() => {}, 1000);
+} else {
+    mkdirSync(dirname(process.env.MUTATION_REPORT), { recursive: true });
+    writeFileSync(process.env.MUTATION_REPORT, JSON.stringify(${JSON.stringify(
+        report(mutant('Survived')),
+    ).replaceAll('scripts/a.mjs', 'scripts/aaa.mjs')}));
+}
+`;
+
+// Three groups, run in this order: scripts-aaa, scripts-tool, scripts-zzz.
+function budgetRepo() {
+    const dir = repo();
+    commit(dir, {
+        'scripts/aaa.mjs': 'a();\nexport const t = 1;\nb();\n',
+        'scripts/tests/aaa.test.mjs': 'test();\n',
+        'scripts/tool.mjs': 'a();\nexport const t = 1;\nb();\n',
+        'scripts/zzz.mjs': 'a();\nexport const t = 1;\nb();\n',
+        'scripts/tests/zzz.test.mjs': 'test();\n',
+    });
+    writeFileSync(join(dir, 'fake-stryker.mjs'), FAKE_BUDGET_STRYKER);
+    return dir;
+}
+
+const budgetRun = (dir, budget, env = {}) =>
+    run(
+        ['--root', dir, '--base', 'main', '--stryker', 'fake-stryker.mjs', ...(budget === null ? [] : ['--budget-minutes', budget])],
+        tmpdir(),
+        env,
+    );
+
+const starts = (dir) => readFileSync(join(dir, 'stryker-starts.log'), 'utf8').trim().split('\n');
+
+const alive = (pid) => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+test('a run that finishes inside its budget behaves as it does without one', () => {
+    const dir = budgetRepo();
+    try {
+        const withBudget = budgetRun(dir, '5', { FAKE_HANG: 'none' });
+        assert.equal(withBudget.status, 1, withBudget.stderr);
+        assert.deepEqual(starts(dir), ['scripts-aaa', 'scripts-tool', 'scripts-zzz']);
+        assert.doesNotMatch(withBudget.stdout, /time budget|incomplete/);
+        rmSync(join(dir, 'stryker-starts.log'));
+        const without = budgetRun(dir, null, { FAKE_HANG: 'none' });
+        assert.equal(without.status, 1, without.stderr);
+        assert.equal(without.stdout, withBudget.stdout);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('at the budget the running group is killed with its child processes, the rest is skipped, and the survivors so far are reported', async () => {
+    const dir = budgetRepo();
+    const summary = join(dir, 'summary.md');
+    try {
+        const r = budgetRun(dir, '0.03', { FAKE_HANG: 'scripts-tool', GITHUB_ACTIONS: 'true', GITHUB_STEP_SUMMARY: summary });
+        const notice =
+            'mutation run stopped at its time budget (0.03 min); results are incomplete: ' +
+            'scripts-tool was cut off and none of its mutants are counted; scripts-zzz not run';
+        // The survivor of the group that finished is a normal finding, so the usual exit status 1.
+        assert.equal(r.status, 1, r.stdout + r.stderr);
+        assert.deepEqual(starts(dir), ['scripts-aaa', 'scripts-tool']);
+        assert.ok(r.stdout.includes(`\n${notice}\n`), r.stdout);
+        assert.ok(r.stdout.includes(`\n::warning::${notice}\n`), r.stdout);
+        assert.match(r.stdout, /scripts\/aaa\.mjs:2:12 EqualityOperator \(Survived\)/);
+        assert.match(readFileSync(summary, 'utf8'), /\*\*mutation run stopped at its time budget/);
+        const pid = Number(readFileSync(join(dir, 'child.pid'), 'utf8'));
+        for (let i = 0; i < 40 && alive(pid); i++) await new Promise((done) => setTimeout(done, 50));
+        assert.equal(alive(pid), false, 'the child process of the killed Stryker run is still running');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('a budget stop with nothing new to report exits 0 and says so, without an annotation outside GitHub', () => {
+    const dir = budgetRepo();
+    try {
+        // The first group hangs, so nothing finished and nothing survived.
+        const r = budgetRun(dir, '0.03', { FAKE_HANG: 'scripts-aaa' });
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.deepEqual(starts(dir), ['scripts-aaa']);
+        assert.match(r.stdout, /results are incomplete: scripts-aaa was cut off and none of its mutants are counted; scripts-tool, scripts-zzz not run/);
+        assert.match(r.stdout, /No new surviving mutants among those that ran/);
+        assert.doesNotMatch(r.stdout, /::warning::/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('a budget used up before any group starts skips them all', () => {
+    const dir = budgetRepo();
+    try {
+        const r = budgetRun(dir, '0.00001', { FAKE_HANG: 'none' });
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.equal(existsSync(join(dir, 'stryker-starts.log')), false);
+        assert.match(r.stdout, /results are incomplete: scripts-aaa, scripts-tool, scripts-zzz not run/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('a budget stop still fails on a changed script that has no test file', () => {
+    const dir = budgetRepo();
+    try {
+        commit(dir, { 'scripts/untested.mjs': 'export const u = 1;\n' });
+        const r = budgetRun(dir, '0.00001', { FAKE_HANG: 'none' });
+        assert.equal(r.status, 1, r.stdout + r.stderr);
+        assert.match(r.stdout, /- scripts\/untested\.mjs/);
+        assert.match(r.stdout, /results are incomplete/);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
