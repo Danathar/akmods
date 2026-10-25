@@ -66,7 +66,7 @@ write command without the flag in fork-local files. Edits to upstream-owned
 files (`Justfile`, `build_files/`, `images.yaml`, existing workflows) need a
 `FORK-PATCHES.md` entry and the owner's review; prefer new fork-local files.
 Load-bearing patches P1 (`org: danathar`), P2 (`AKMODS_IMAGE_NAME` / name from
-`images.yaml`) and T6 are asserted by `policies/fork-patches.json`.
+`images.yaml`), T6 and T7 are asserted by `policies/fork-patches.json`.
 
 ## 4. Token scopes: least privilege
 

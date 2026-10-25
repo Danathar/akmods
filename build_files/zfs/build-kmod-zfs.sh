@@ -43,9 +43,12 @@ echo "getting zfs-${ZFS_VERSION}.tar.gz"
 
 echo "Import key"
 # https://openzfs.github.io/openzfs-docs/Project%20and%20Community/Signing%20Keys.html
-gpg --yes --keyserver keyserver.ubuntu.com --recv D4598027
-gpg --yes --keyserver keyserver.ubuntu.com --recv C77B9667
-gpg --yes --keyserver keyserver.ubuntu.com --recv C6AF658B
+# Full fingerprints, not 8-digit short IDs: anyone can upload a key whose short ID
+# collides, and gpg imports every key that matches. With a full fingerprint gpg
+# drops any returned key that does not match it.
+gpg --yes --keyserver hkps://keyserver.ubuntu.com --recv-keys 4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027 # Tony Hutter
+gpg --yes --keyserver hkps://keyserver.ubuntu.com --recv-keys 29D5610EAE2941E355A2FE8AB97467AAC77B9667 # Ned Bass
+gpg --yes --keyserver hkps://keyserver.ubuntu.com --recv-keys C33DF142657ED1F7C328A2960AB9E991C6AF658B # Brian Behlendorf
 
 echo "Verifying tar.gz signature"
 if ! gpg --verify "zfs-${ZFS_VERSION}.tar.gz.asc" "zfs-${ZFS_VERSION}.tar.gz"; then

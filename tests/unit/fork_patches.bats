@@ -112,6 +112,15 @@ setup() {
     [[ "${output}" == *python3-cffi* ]]
 }
 
+# covers: T7
+@test "T7: OpenZFS signing keys are fetched by full fingerprint, not short ID" {
+    run grep -cE -- '--recv-keys [0-9A-F]{40}\b' "${REPO_ROOT}/build_files/zfs/build-kmod-zfs.sh"
+    [ "${status}" -eq 0 ]
+    [ "${output}" -eq 3 ]
+    run grep -E -- '--recv(-keys)?[[:space:]]+(0x)?[0-9A-Fa-f]{8}([^0-9A-Fa-f]|$)' "${REPO_ROOT}/build_files/zfs/build-kmod-zfs.sh"
+    [ "${status}" -eq 1 ]
+}
+
 # covers: P4
 @test "P4: scorecard workflow and summary script exist" {
     [ -f "${REPO_ROOT}/.github/workflows/scorecard.yml" ]

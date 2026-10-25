@@ -199,6 +199,7 @@ const GOOD_PATCHES = {
     'images.yaml': 'base: &b\n  org: danathar\n',
     Justfile: `akmods_name := env('AKMODS_IMAGE_NAME', shell(yq + ' ".images.$1[\\"$2\\"].$3.name" images.yaml'))\n`,
     'build_files/prep/build-prep.sh': 'RPMS_TO_INSTALL+=(\n    git\n)\n',
+    'build_files/zfs/build-kmod-zfs.sh': 'gpg --keyserver hkps://k --recv-keys 4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027 # T\n',
 };
 
 test('fork-patches: all patches present passes', () => {
@@ -218,6 +219,15 @@ test('fork-patches: missing P2 name lookup / env override fails', () => {
     const v = checkForkPatches(root, policy('fork-patches')).join('\n');
     assert.match(v, /P2-env-override/);
     assert.match(v, /P2-images-yaml-lookup/);
+});
+
+test('fork-patches: a short key ID for the OpenZFS keys fails (T7)', () => {
+    for (const line of ['--recv D4598027', '--recv-keys 0xD4598027', '--recv-keys d4598027 # T']) {
+        const { root } = tree({ ...GOOD_PATCHES, 'build_files/zfs/build-kmod-zfs.sh': `gpg --keyserver k ${line}\n` });
+        const v = checkForkPatches(root, policy('fork-patches')).join('\n');
+        assert.match(v, /T7-zfs-key-fingerprints missing/, line);
+        assert.match(v, /T7-zfs-key-fingerprints reverted/, line);
+    }
 });
 
 test('fork-patches: missing file fails', () => {
