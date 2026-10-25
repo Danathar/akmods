@@ -561,7 +561,8 @@ function layout(files) {
 
 function run(args, cwd, extraEnv = {}) {
     const env = { ...process.env, ...extraEnv };
-    if (!('GITHUB_STEP_SUMMARY' in extraEnv)) delete env.GITHUB_STEP_SUMMARY;
+    // The runner sets both; a test that wants them passes them explicitly.
+    for (const k of ['GITHUB_ACTIONS', 'GITHUB_STEP_SUMMARY']) if (!(k in extraEnv)) delete env[k];
     return spawnSync(process.execPath, [SCRIPT, ...args], { cwd, env, encoding: 'utf8' });
 }
 
