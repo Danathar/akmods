@@ -25,6 +25,13 @@
             "file": "build_files/prep/build-prep.sh",
             "mustMatch": "^\\s+git\\s*$",
             "message": "build-prep.sh must install git so main-flavor ZFS builds can apply patches (FORK-PATCHES.md T6)"
+        },
+        {
+            "id": "T7-zfs-key-fingerprints",
+            "file": "build_files/zfs/build-kmod-zfs.sh",
+            "mustMatch": "--recv-keys [0-9A-F]{40}\\b",
+            "mustNotMatch": "--recv(-keys)?\\s+(0x)?[0-9A-Fa-f]{8}\\b(?![0-9A-Fa-f])",
+            "message": "build-kmod-zfs.sh must fetch the OpenZFS signing keys by full fingerprint, never by 8-digit short ID (FORK-PATCHES.md T7)"
         }
     ]
 }
