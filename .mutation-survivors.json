@@ -21,6 +21,27 @@
             "original": "process.env.GITHUB_STEP_SUMMARY",
             "replacement": "true",
             "reason": "Equivalent: with GITHUB_STEP_SUMMARY unset, appendFileSync(undefined) throws and the catch ignores it, so nothing is written either way and the exit status does not change."
+        },
+        {
+            "file": "scripts/mutation-check.mjs",
+            "mutator": "StringLiteral",
+            "original": "'SIGTERM'",
+            "replacement": "\"\"",
+            "reason": "Equivalent: process.kill sends its default signal, SIGTERM, when the signal is an empty string, so the budget still sends SIGTERM first."
+        },
+        {
+            "file": "scripts/mutation-check.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "detached",
+            "replacement": "true",
+            "reason": "Equivalent in `if (detached) killGroup('SIGKILL')`: without a budget Stryker is not detached, so its pid names no process group, process.kill(-pid) fails with ESRCH and the catch ignores it; nothing is killed either way."
+        },
+        {
+            "file": "scripts/mutation-check.mjs",
+            "mutator": "EqualityOperator",
+            "original": "left <= 0",
+            "replacement": "left < 0",
+            "reason": "Equivalent in what is counted: left is exactly 0 only when the check lands on the deadline millisecond; the group then starts and a 0 ms timer cuts it at once, and a cut group's mutants are not counted, same as a group that is not run."
         }
     ]
 }

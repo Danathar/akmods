@@ -48,6 +48,11 @@ unpinned everywhere. The `mutation` job in `agent-tooling.yml` does that audit o
   ready-to-fill ledger entry), 2 the check could not run. The job has `continue-on-error: true`, is never a
   required check, is skipped for `chore: sync upstream` pull requests, and has a 45 minute timeout (a full
   guard test run is about 19 s and runs once per mutant; a typical hook fix is 100 to 300 mutants).
+- **Time budget:** the job passes `--budget-minutes 35`, so a large change cannot run into the 45 minute job
+  timeout, which would end the job as `cancelled` and block the merge (#216). At the budget the Stryker run in
+  progress is killed with its test processes, the remaining groups are skipped, and the log, a `::warning::`
+  annotation and the step summary say the results are incomplete; survivors found in the groups that finished
+  are still reported and the exit status is the usual 0 or 1. Without the option there is no limit.
 - **What to do with a survivor:** add a test that fails on it. If it is equivalent (behaves the same) or
   harmless over-refusal (the guard refuses more, never less), add the printed entry to
   `.mutation-survivors.json` with a real reason. Entries match on file, mutator, original and replacement
