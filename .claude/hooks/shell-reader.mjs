@@ -412,30 +412,111 @@ export function extractSubstitutions(input) {
     return found;
 }
 
+// Reserved words after which the next word is read as a command name, so a
+// `case` there opens a case statement.
+const BEFORE_COMMAND = new Set(['!', '{', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', 'time']);
+
 /**
  * Index just past the `)` that closes a substitution whose body starts at `j`,
  * ignoring parens in quotes (`$'...'` included, where `\'` does not end the
- * string), escaped, or in heredoc bodies.
+ * string), escaped, or in heredoc bodies. The `)` after a case pattern
+ * (`$(case $x in a) git push;; esac)`) closes the pattern, not the
+ * substitution, as in bash; reading it as the end would leave the commands
+ * after it on the outer line as plain arguments.
  */
 export function closeParen(input, j) {
     let depth = 1;
     let q = null;
     const inner = [];
+    // Open case statements: the paren depth each was opened at and where its
+    // reading is (`subject` before `in`, `pattern`, or a clause's `body`).
+    const cases = [];
+    let word = '';
+    let plain = true; // the word holds no quote or escape, so it can be a reserved word
+    let wordAtCommand = false;
+    let atCommand = true;
+    const endWord = () => {
+        if (word === '') return;
+        const top = cases.at(-1);
+        const here = top !== undefined && top.depth === depth;
+        if (here && top.state === 'subject') {
+            if (top.subject && plain && word === 'in') top.state = 'pattern';
+            top.subject = true;
+            atCommand = false;
+        } else if (here && plain && word === 'esac'
+            && ((top.state === 'pattern' && !top.patternRead) || (top.state === 'body' && wordAtCommand))) {
+            // `esac` ends the case only where a pattern would begin or at a
+            // command position in a clause; after `a|` or `(a|` it is a pattern.
+            cases.pop();
+            atCommand = false;
+        } else if (here && top.state === 'pattern') {
+            top.patternRead = true;
+        } else if (plain && wordAtCommand && word === 'case') {
+            cases.push({ depth, state: 'subject', subject: false, patternRead: false });
+            atCommand = false;
+        } else {
+            atCommand = plain && wordAtCommand && BEFORE_COMMAND.has(word);
+        }
+        word = '';
+        plain = true;
+    };
+    const addToWord = (text, isPlain) => {
+        if (word === '') wordAtCommand = atCommand;
+        word += text;
+        if (!isPlain) plain = false;
+    };
     for (; j < input.length && depth > 0; j++) {
         const d = input[j];
-        if (d === '\\' && q !== "'") j++;
-        else if (q) {
-            if (d === q) q = null;
-        } else if (d === '$' && input[j + 1] === "'") j = readAnsiC(input, j + 2).next - 1;
-        else if (d === "'" || d === '"') q = d;
-        else if (d === '<' && input[j + 1] === '<' && input[j + 2] !== '<') {
+        if (q) {
+            if (d === '\\' && q !== "'") j++;
+            else if (d === q) q = null;
+        } else if (d === '\\') {
+            addToWord('\\', false);
+            j++;
+        } else if (d === '$' && input[j + 1] === "'") {
+            addToWord("$'", false);
+            j = readAnsiC(input, j + 2).next - 1;
+        } else if (d === "'" || d === '"') {
+            addToWord(d, false);
+            q = d;
+        } else if (d === '<' && input[j + 1] === '<' && input[j + 2] !== '<') {
+            endWord();
             const h = readHeredocStart(input, j);
             if (h.delim) inner.push(h);
             j = h.next - 1;
         } else if (d === '\n' && inner.length) {
+            endWord();
+            atCommand = true;
             while (inner.length) j = skipHeredocBody(input, j + 1, inner.shift().delim) - 1;
-        } else if (d === '(') depth++;
-        else if (d === ')') depth--;
+        } else if (' \t\n;&|()<>'.includes(d)) {
+            endWord();
+            const top = cases.at(-1);
+            const here = top !== undefined && top.depth === depth;
+            if (d === '(') {
+                // A pattern may open with `(`: `case $x in (a) ...`.
+                if (here && top.state === 'pattern' && !top.patternRead) top.patternRead = true;
+                else depth++;
+                atCommand = true;
+            } else if (d === ')') {
+                if (here && top.state === 'pattern') {
+                    top.state = 'body';
+                    atCommand = true;
+                } else {
+                    depth--;
+                    while (cases.length && cases.at(-1).depth > depth) cases.pop();
+                    atCommand = false;
+                }
+            } else if (d === ';' && here && top.state === 'body' && (input[j + 1] === ';' || input[j + 1] === '&')) {
+                // `;;`, `;&` or `;;&` ends a clause; the next pattern follows.
+                j += input[j + 1] === ';' && input[j + 2] === '&' ? 2 : 1;
+                top.state = 'pattern';
+                top.patternRead = false;
+            } else if (d !== ' ' && d !== '\t' && d !== '<' && d !== '>') {
+                atCommand = true;
+            }
+        } else {
+            addToWord(d, true);
+        }
     }
     return j;
 }
