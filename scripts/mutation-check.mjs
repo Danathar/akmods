@@ -38,6 +38,7 @@
 import { appendFileSync, existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { pathToFileURL } from 'node:url';
 
 export const LEDGER = '.mutation-survivors.json';
@@ -388,7 +389,7 @@ const KILL_GRACE_MS = 5000;
  * Stryker for one group, killed with its process group (the test processes it
  * starts too) if it is still running after `limitMs`.
  * @returns {Promise<{report: object, cut: boolean}>} `cut` when the budget
- *   killed it; its report is then whatever Stryker had written, if readable
+ *   killed it; none of its mutants are counted then
  */
 async function runStryker(root, bin, run, limitMs) {
     const report = `reports/mutation/${run.name}.json`;
@@ -396,12 +397,12 @@ async function runStryker(root, bin, run, limitMs) {
     console.log(`\n== ${run.name}: mutating ${run.mutate.length} range(s) against \`${run.command}\``);
     for (const m of run.mutate) console.log(`   ${m}`);
     const env = { ...process.env, MUTATION_TEST_COMMAND: run.command, MUTATION_REPORT: report };
-    const child = spawn(process.execPath, [bin, 'run', CONFIG, '--mutate', run.mutate.join(',')], {
-        cwd: root,
-        env,
-        stdio: 'inherit',
-        detached: limitMs !== null,
-    });
+    // With a budget Stryker gets a process group of its own, so that the budget
+    // can end it with its test processes. Without one it stays in ours, and
+    // Ctrl-C in a terminal stops it as usual.
+    const detached = limitMs !== null;
+    let child;
+    let timer = null;
     let cut = false;
     const killGroup = (signal) => {
         try {
@@ -410,35 +411,35 @@ async function runStryker(root, bin, run, limitMs) {
             // The group is already gone.
         }
     };
-    const timers = [];
-    if (limitMs !== null) {
-        timers.push(
-            setTimeout(() => {
+    let status;
+    let signal;
+    try {
+        child = spawn(process.execPath, [bin, 'run', CONFIG, '--mutate', run.mutate.join(',')], {
+            cwd: root,
+            env,
+            stdio: 'inherit',
+            detached,
+        });
+        if (detached) {
+            timer = setTimeout(() => {
                 cut = true;
                 killGroup('SIGTERM');
-                timers.push(setTimeout(() => killGroup('SIGKILL'), KILL_GRACE_MS));
-            }, limitMs),
-        );
-    }
-    const r = await new Promise((done) => {
-        child.on('error', (e) => done({ status: null, signal: null, error: e }));
-        child.on('close', (status, signal) => done({ status, signal }));
-    });
-    timers.forEach(clearTimeout);
-    // Children Stryker started may outlive it; end whatever is left of the group.
-    if (limitMs !== null) killGroup('SIGKILL');
-    const path = resolve(root, report);
-    if (cut) {
-        // A killed run has usually written no report; take one only if it parses.
-        try {
-            const partial = JSON.parse(readFileSync(path, 'utf8'));
-            return { report: partial && typeof partial.files === 'object' ? partial : { files: {} }, cut };
-        } catch {
-            return { report: { files: {} }, cut };
+                timer = setTimeout(() => killGroup('SIGKILL'), KILL_GRACE_MS);
+            }, limitMs);
         }
+        [status, signal] = await once(child, 'close');
+    } catch (e) {
+        // spawn throws for some failures (E2BIG: the ranges do not fit in one
+        // argument), and `once` rejects on the 'error' event of the others.
+        fail(`cannot start Stryker (${run.name}): ${e.message}`);
     }
-    if (r.error) fail(`cannot start Stryker (${run.name}): ${r.error.message}`);
-    if (r.status !== 0) fail(`Stryker (${run.name}) exited with ${r.status ?? r.signal}`);
+    clearTimeout(timer);
+    // Children Stryker started may outlive it; end whatever is left of the group.
+    if (detached) killGroup('SIGKILL');
+    // Stryker writes its report at the end, so a run that was cut off has none.
+    if (cut) return { report: { files: {} }, cut };
+    if (status !== 0) fail(`Stryker (${run.name}) exited with ${status ?? signal}`);
+    const path = resolve(root, report);
     // Stryker writes no report when the ranges hold no code it can mutate.
     return { report: existsSync(path) ? readJson(path, 'Stryker report') : { files: {} }, cut };
 }
@@ -474,20 +475,18 @@ async function main(argv) {
             const bin = resolve(opts.root, opts.stryker);
             if (!existsSync(bin)) fail(`Stryker binary ${bin} does not exist`);
             const budgetMs = opts.budgetMinutes === null ? null : opts.budgetMinutes * 60_000;
-            for (const [i, run] of plan.runs.entries()) {
+            const queue = [...plan.runs];
+            while (queue.length) {
+                const run = queue.shift();
                 const left = budgetMs === null ? null : started + budgetMs - Date.now();
                 if (left !== null && left <= 0) {
-                    stopped = { minutes: opts.budgetMinutes, cut: null, skipped: plan.runs.slice(i).map((r) => r.name) };
+                    stopped = { minutes: opts.budgetMinutes, cut: null, skipped: [run, ...queue].map((r) => r.name) };
                     break;
                 }
                 const result = await runStryker(opts.root, bin, run, left);
                 reports.push(result.report);
                 if (result.cut) {
-                    stopped = {
-                        minutes: opts.budgetMinutes,
-                        cut: run.name,
-                        skipped: plan.runs.slice(i + 1).map((r) => r.name),
-                    };
+                    stopped = { minutes: opts.budgetMinutes, cut: run.name, skipped: queue.map((r) => r.name) };
                     break;
                 }
             }
