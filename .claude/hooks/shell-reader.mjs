@@ -443,7 +443,10 @@ export function closeParen(input, j) {
             if (top.subject && plain && word === 'in') top.state = 'pattern';
             top.subject = true;
             atCommand = false;
-        } else if (here && plain && word === 'esac' && (top.state === 'pattern' || wordAtCommand)) {
+        } else if (here && plain && word === 'esac'
+            && ((top.state === 'pattern' && !top.patternRead) || (top.state === 'body' && wordAtCommand))) {
+            // `esac` ends the case only where a pattern would begin or at a
+            // command position in a clause; after `a|` or `(a|` it is a pattern.
             cases.pop();
             atCommand = false;
         } else if (here && top.state === 'pattern') {

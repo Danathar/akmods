@@ -949,6 +949,10 @@ const blocked = [
     ['echo $(if true; then case a in a) sudo id;; esac; fi)', 'privilege escalation'],
     ['echo $(case a in a) case b in b) true;; esac; sudo id;; esac)', 'privilege escalation'],
     ['echo $(case $(echo a) in a) sudo id;; esac)', 'privilege escalation'],
+    // `esac` after `|` or `(` in a pattern list is a pattern, not the case's end
+    ['echo $(case esac in a|esac) sudo id;; esac)', 'privilege escalation'],
+    ['echo $(case esac in a | esac) git push --force origin main;; esac)', 'force'],
+    ['echo $(case esac in (a|esac) gh pr merge 1;; esac)', 'merge'],
     // `NAME+=value` sets NAME for the command as `NAME=value` does
     ['GIT_EXTERNAL_DIFF+=x git diff', 'GIT_EXTERNAL_DIFF'],
     ['PAGER+=less git log', 'PAGER'],
