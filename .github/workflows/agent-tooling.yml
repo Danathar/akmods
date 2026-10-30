@@ -44,7 +44,7 @@ jobs:
 
   mutation:
     name: Mutation check on changed lines (advisory)
-    if: "github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'chore: sync upstream')"
+    if: "github.event_name == 'pull_request' && !contains(github.event.pull_request.title, 'chore: sync upstream')"
     runs-on: ubuntu-latest
     timeout-minutes: 45
     continue-on-error: true
