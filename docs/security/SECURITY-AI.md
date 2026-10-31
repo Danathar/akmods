@@ -70,15 +70,26 @@ Load-bearing patches P1 (`org: danathar`), P2 (`AKMODS_IMAGE_NAME` / name from
 
 ## 4. Token scopes: least privilege
 
-- Workflow `permissions:` default to read. Fork-local workflows declare
-  top-level `permissions: contents: read` and raise scopes per job only
-  (policy-enforced; top-level write and `write-all` are rejected).
+- Workflow `permissions:` default to read. Fork-local workflows declare a
+  read-only top-level `permissions:` (`contents: read`, or `{}`) and raise
+  scopes per job only (policy-enforced; top-level write and `write-all` are
+  rejected).
 - Fork-local actions are pinned to full commit SHAs with a version comment.
-- Today only `packages: write`, `id-token: write` and `attestations: write`
-  exist, in the upstream build/cleanup workflows. All `Build * akmods` workflows and cleanup are
+- The upstream build, kernel-cache and cleanup workflows
+  (`build-akmods-*.yml`, `reusable-build.yml`, `reusable-cache-kernel.yml`,
+  `cleanup.yml`) hold `packages: write`, `id-token: write` and
+  `attestations: write`. All `Build * akmods` workflows and cleanup are
   disabled in this fork; an agent MUST NOT enable them, run them, or change
   repository settings (rulesets, secrets, Actions permissions). See
   [branch-protection.md](../branch-protection.md).
+- Upstream's `scorecard.yml` holds `security-events: write` and
+  `id-token: write` to upload its results.
+- Fork-local jobs that write: `claude.yml` and `ai-fix.yml` hold
+  `contents: write`, `issues: write` and `pull-requests: write`, and run only
+  when a maintainer asks; `labeler.yml` holds `pull-requests: write`;
+  `auto-issues.yml`, `auto-qa.yml` and `nightly-compliance.yml` hold
+  `issues: write`. `scripts/tests/workflow-token-scopes.test.mjs` fails when a
+  workflow's write scopes and this section disagree.
 - Agents never merge. They open PRs; the owner (or the Hive serialized merge
   lane after required checks pass) merges.
 - Agents run only the checks listed in `AGENTS.md`. Do not run `just build`,
