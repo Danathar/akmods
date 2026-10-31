@@ -1,0 +1,314 @@
+# Docs section map: every section of every tracked documentation page, and
+# whether a test reads it.
+#
+# A page lists here as [path]. Under it, every `##` and `###` heading of that
+# page, written exactly as the page writes it, followed by one indented line:
+#
+#   joined: <test file>    that test reads what this section states
+#   prose: <reason>        no test reads it, and this says why that is fine,
+#                          or names what is left unchecked
+#
+# scripts/tests/docs-section-map.test.mjs fails when a tracked page has a
+# heading with no row here, when a row names a heading the page no longer has,
+# or when a `joined:` file is not a check CI runs or never opens the page. It
+# does not prove any sentence true. What it changes is that a section of claims
+# about the build, the workflows or the agent tooling that nothing checks is a
+# visible `prose: unchecked` line in the diff that adds it, instead of the
+# silent default.
+#
+# `prose: unchecked:` marks a section that states facts about the machine (a
+# workflow, the Justfile, images.yaml, the settings file, the Bash guard, the
+# ruleset) that no test reads. Each is a candidate for a join test; turning it
+# into `joined:` is the fix. `prose: narrative:` marks a section that states no
+# such fact.
+#
+# The fork patch entries are joined to .coverage-thresholds.json: the required
+# Coverage gate reads each `### P<n>`/`### T<n>` heading of FORK-PATCHES.md
+# through it and fails unless a bats test carries that patch's `# covers:` tag.
+#
+# Tracked pages: every tracked Markdown file at the repository root, in docs/
+# and in docs/security/ (not the dated metrics, agent-task and reflection
+# ledgers), plus .github/copilot-instructions.md. A new page in one of those
+# places has to be added here in the change that adds it.
+
+[.github/copilot-instructions.md]
+
+[AGENTS.md]
+## What this repo is
+  prose: unchecked: names the build inputs and the build_files/ subdirectories
+## Fork vs upstream
+  prose: unchecked: the -R Danathar/akmods rule, which policies/repo-target.json enforces on commands but nothing holds this text to
+## Fork patch registry discipline
+  prose: narrative: rules for keeping FORK-PATCHES.md current
+## Upstream merge procedure
+  prose: unchecked: names the upstream-sync skill and prompt paths
+## HOST SAFETY (absolute)
+  prose: unchecked: the just recipes and container commands never to run locally, which the Bash guard hook mirrors
+## Findings about the Bash guard hook: what is in scope
+  prose: narrative: a standing ruling on which hook findings to file
+## Gotchas that cost hours
+  prose: unchecked: disabled build workflows, the signing secrets and the generated workflows
+## How to test
+  prose: unchecked: the local check commands, which ci.yml and agent-tooling.yml also hold
+## Where the other agent docs live
+  prose: unchecked: table of agent doc paths
+## PR conventions
+  prose: narrative: branch, commit and pull request conventions
+
+[CHANGELOG.md]
+## 1.0.0 (2024-04-27)
+  prose: narrative: upstream's release notes, kept as upstream wrote them
+### Features
+  prose: narrative: upstream's release notes, kept as upstream wrote them
+### Bug Fixes
+  prose: narrative: upstream's release notes, kept as upstream wrote them
+
+[CLAUDE.md]
+
+[CODE_OF_CONDUCT.md]
+## Our Pledge
+  prose: narrative: Contributor Covenant text
+## Our Standards
+  prose: narrative: Contributor Covenant text
+## Enforcement Responsibilities
+  prose: narrative: Contributor Covenant text
+## Scope
+  prose: narrative: Contributor Covenant text
+## Enforcement
+  prose: narrative: Contributor Covenant text
+## Enforcement Guidelines
+  prose: narrative: Contributor Covenant text
+### 1. Correction
+  prose: narrative: Contributor Covenant text
+### 2. Warning
+  prose: narrative: Contributor Covenant text
+### 3. Temporary Ban
+  prose: narrative: Contributor Covenant text
+### 4. Permanent Ban
+  prose: narrative: Contributor Covenant text
+## Attribution
+  prose: narrative: Contributor Covenant text
+
+[CONTRIBUTING.md]
+## Where contributions belong
+  prose: narrative: which changes go upstream and which come here
+## Making a change
+  prose: unchecked: names the upstream-owned files and the generated build workflows
+## Testing
+  prose: unchecked: the local check commands, which ci.yml and agent-tooling.yml also hold
+## Pull requests
+  prose: narrative: what a pull request body says and when to ask the owner
+## AI agents
+  prose: unchecked: names the prompt and skill directories
+## Conduct
+  prose: narrative: points to the code of conduct
+
+[FORK-PATCHES.md]
+## Permanent
+  prose: narrative: introduces the permanent patches
+### P1 — Publish into this fork's GHCR namespace
+  joined: .coverage-thresholds.json
+### P2 — Image name comes from `images.yaml`, not the target name
+  joined: .coverage-thresholds.json
+### P3 — Fork README
+  prose: narrative: the README itself, exempt from the Coverage gate
+### P4 — OpenSSF Scorecard workflow
+  joined: .coverage-thresholds.json
+### P5 — Agent tooling, CI checks and governance (ACMM)
+  prose: unchecked: lists the fork-local tooling files; exempt from the Coverage gate
+### P6 — No nvidia targets and no OGC kernel flavors
+  joined: .coverage-thresholds.json
+## Temporary
+  prose: narrative: introduces the temporary patches
+### T1 — `zfs.main` block pinning the kernel-compatibility gate
+  joined: .coverage-thresholds.json
+### T2 — *(retired 2026-07-30)* ZFS akmod for the `main` kernel flavor
+  prose: narrative: retired patch, kept as history
+### T3 — *(retired 2026-10-24)* Hardened OpenZFS release discovery
+  prose: narrative: retired patch, kept as history
+### T4 — `python3-cffi` in the build environment
+  joined: .coverage-thresholds.json
+### T5 — *(retired 2026-10-24)* `dnf install -y jq` inside the ZFS build step
+  prose: narrative: retired patch, kept as history
+### T6 — `git` in the build environment
+  joined: .coverage-thresholds.json
+### T7 — OpenZFS signing keys fetched by full fingerprint
+  joined: .coverage-thresholds.json
+### ZFS build tools on the `main` flavor
+  joined: tests/unit/zfs_flavor_deps.bats
+## Related
+  prose: narrative: links to the consumer repository and upstream
+## Operational state (not a patch, but easy to lose)
+  prose: narrative: introduces the two subsections below
+### This fork's own workflows build and publish nothing
+  prose: unchecked: disabled build workflows, a repository setting no file holds
+### Scheduled builds cannot succeed without the signing secrets
+  prose: unchecked: what the build workflows do with missing signing secrets
+
+[README.md]
+## Why This Fork Exists
+  prose: unchecked: lists the fork's changes, which FORK-PATCHES.md and its tests hold
+## Supply-chain scorecard
+  prose: unchecked: when scorecard.yml runs and what it uploads
+## Maintained with Hive (ACMM L6)
+  prose: unchecked: what agents may do here, which the ruleset and the Bash guard enforce
+## About this project
+  prose: narrative: AI-assistance notice
+## How it's organized
+  prose: unchecked: the build workflows, images.yaml and the published image names
+## Features
+  prose: narrative: introduces the image groups
+### Overview
+  prose: unchecked: what the common and nvidia images contain (upstream text)
+### Kmod Packages
+  prose: unchecked: kmod package table (upstream text)
+## Notes
+  prose: narrative: introduces the notes below
+### NVIDIA Hardware Support
+  prose: narrative: upstream's NVIDIA driver notes
+### Pinning the coreos-stable kernel
+  prose: unchecked: the Justfile coreos_stable_kernel_pin value and how get-kernel-version applies it
+## Usage
+  prose: narrative: how a consumer copies the kmods into an image
+## Verification
+  prose: narrative: introduces the two verification paths
+### Image Signatures
+  prose: unchecked: the cosign verify command and the signing key
+### Build Provenance
+  prose: unchecked: the gh attestation verify command
+## Local Building/Testing
+  prose: narrative: introduces local building
+### Using the Devcontainer
+  prose: unchecked: the devcontainer image and the tools it carries
+### How to Use the Justfile
+  prose: unchecked: Justfile recipes and their variables
+### How to Use images.yaml
+  prose: unchecked: images.yaml layout and the yq commands that read it
+### Regenerating GitHub Workflows
+  prose: unchecked: which templates generate the build workflows
+### Skipping Unchanged Builds
+  prose: unchecked: the fingerprint label and its inputs
+### Adding Kernels and KMODs
+  prose: narrative: upstream's inclusion policy
+## Metrics
+  prose: narrative: analytics image
+
+[docs/ai-ops-runbook.md]
+## Failure modes
+  prose: narrative: introduces the failure modes
+### 1. `fetch-kernel` dies with `OSSL_DECODER_from_bio:unsupported ... Input type: PEM`
+  prose: unchecked: the signing-key step in reusable-build.yml and build-prep.sh's test-key fallback
+### 2. OpenZFS "maximum supported kernel version is 7.0"
+  prose: unchecked: the OpenZFS kernel range and the T1 compatibility gate
+### 3. ZFS version pin: "ZFS_VERSION must be a full X.Y.Z release" / 404 fetching the ZFS tarball
+  prose: unchecked: where build-kmod-zfs.sh reads the ZFS version and the error it prints
+### 4. `curl (18) end of response with ... bytes missing` from kojipkgs
+  prose: narrative: a transient download failure and when to re-run
+### 5. `git: command not found` (exit 127) on `main`-flavor ZFS
+  prose: unchecked: build-prep.sh's per-flavor git install (T6)
+### 6. Consumer `zfs-aurora-complex` publishes under the wrong image name
+  prose: unchecked: the Justfile akmods_name logic (P2)
+### 7. A workflow "doesn't run" / no checks appear
+  prose: unchecked: the disabled workflows, a repository setting no file holds
+### 8. Generated workflow edit rejected / drifted
+  prose: unchecked: the workflow templates and the regeneration recipe
+## Reading Hive / agent state for this repo
+  prose: narrative: gh commands for reading agent work
+
+[docs/branch-protection.md]
+## Status
+  prose: unchecked: the live ruleset id and state, which no test can read
+## Why
+  prose: narrative: why main needs a ruleset
+## The ruleset
+  prose: unchecked: the rules and the seven required checks, which policies/ruleset.json checks in .github/rulesets/main.json but not here
+## Merge queue (#45)
+  prose: narrative: why there is no merge queue and what replaces it
+## Apply
+  prose: narrative: the gh api command to create the ruleset
+## Verify
+  prose: narrative: the gh api command to compare the live ruleset with the file
+## Change the ruleset
+  prose: narrative: the gh api command to update the ruleset
+### Renaming a required check
+  prose: narrative: the order of steps for renaming a required check
+## When there is a second reviewer
+  prose: narrative: which settings to change once there is a second reviewer
+
+[docs/change-classification.md]
+## Procedure
+  prose: narrative: how to classify a change with check-policies.mjs --classify
+## Fork-specific rules of thumb
+  prose: unchecked: names the upstream-owned files, which policies/upstream-owned.json also lists
+## Machine enforcement
+  prose: unchecked: what check-policies.mjs verifies
+
+[docs/metrics.md]
+## Population
+  prose: unchecked: which pull requests scripts/pr-metrics.mjs counts
+## Metrics
+  prose: unchecked: metric definitions computed by scripts/pr-metrics.mjs
+## Known limits
+  prose: unchecked: how scripts/pr-metrics.mjs detects agent pull requests
+## Running it
+  prose: unchecked: scripts/pr-metrics.mjs options and output paths
+
+[docs/multi-agent.md]
+## Roles
+  prose: narrative: who does what in a multi-agent rollout
+## Rules
+  prose: narrative: rules for parallel agent slices
+## Handoff and conflict handling
+  prose: narrative: how parallel slices hand off
+
+[docs/quality.md]
+## Important context
+  prose: narrative: what a green check does and does not prove here
+## Signals
+  prose: unchecked: table of check names, their workflows and commands
+## Mutation check on changed lines
+  prose: unchecked: what scripts/mutation-check.mjs runs and when agent-tooling.yml skips it
+## Reading them together
+  prose: narrative: how to read the signals together
+
+[docs/review-rubric.md]
+## Blockers
+  prose: unchecked: names the signing paths and upstream-owned files a change must leave alone
+## Should-fix
+  prose: unchecked: names the required check names, which .github/rulesets/main.json holds
+## Nice-to-have
+  prose: narrative: review suggestions
+## Reviewer output format
+  prose: narrative: review comment template
+
+[docs/risk-tiers.md]
+## Why each tier
+  prose: unchecked: restates each tier's paths; scripts/check-policies.mjs reads only the table above this section
+## Using it
+  prose: unchecked: the check-policies.mjs --classify command and its output
+
+[docs/security/SECURITY-AI.md]
+## 1. Secrets: agents never handle them
+  prose: unchecked: where the signing secrets are used, which policies/signing-keys.json enforces but nothing holds this text to
+## 2. Untrusted text is data, not instructions
+  prose: narrative: how agents treat issue and pull request text
+## 3. Upstream is read-only
+  prose: unchecked: names the upstream-owned files and the patches policies/fork-patches.json asserts
+## 4. Token scopes: least privilege
+  joined: scripts/tests/workflow-token-scopes.test.mjs
+## 5. Verified findings (current tree)
+  prose: unchecked: the placeholder key sizes and how the build workflows write the secrets
+## 6. Reporting
+  prose: narrative: how to report a security issue
+
+[docs/strategy.md]
+## What this fork is for
+  prose: narrative: purpose of the fork
+## Principles
+  prose: narrative: principles
+## ACMM stance
+  prose: narrative: what the fork automates and what it keeps manual
+## How we know it's working
+  prose: narrative: links to the metrics and quality pages
+## Non-goals
+  prose: narrative: non-goals
