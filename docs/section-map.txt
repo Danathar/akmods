@@ -265,7 +265,7 @@
 ## Important context
   prose: narrative: what a green check does and does not prove here
 ## Signals
-  prose: unchecked: table of check names, their workflows and commands
+  joined: scripts/tests/quality-signals.test.mjs
 ## Mutation check on changed lines
   prose: unchecked: what scripts/mutation-check.mjs runs and when agent-tooling.yml skips it
 ## Reading them together

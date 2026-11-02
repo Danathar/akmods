@@ -14,9 +14,9 @@ tooling* are sound; it does **not** prove a real kernel/akmod build works. Real 
 
 | Signal | Where | What a failure means | First action |
 |---|---|---|---|
-| `Lint (shellcheck)` | `.github/workflows/ci.yml` | Shell in `build_files/`, `fetch-kernel.sh`, scripts has a defect. | Run `shellcheck` locally on the named file. |
+| `Lint (shellcheck)` | `.github/workflows/ci.yml` | A tracked shell script has a defect: fork-owned files fail on any finding, upstream-owned ones only on errors (see `.shellcheckrc`). | `tests/lint-shellcheck.sh`, which applies the same two tiers (plain `shellcheck` on an upstream-owned file also prints findings CI ignores). |
 | `Lint (actionlint)` | `ci.yml` | Workflow syntax / expression / pinning problem. | `actionlint` locally. |
-| `Unit tests (bats)` | `ci.yml` | Behaviour of a shell function regressed (e.g. the ZFS configure-argument gate, P2 name lookup). | `npx --yes bats@1.11.1 tests/unit`. |
+| `Unit tests (bats)` | `ci.yml` | Behaviour of a shell function regressed (e.g. the ZFS configure-argument gate, P2 name lookup). | `tests/install-tools.sh "$HOME/.local/bin"` for the pinned `just` and `yq`, then `npx --yes bats@1.11.1 tests/unit`; without them on `PATH` the tests that need them are skipped, not run. |
 | `E2E (fedora container)` | `ci.yml` | Scripts fail in a real Fedora userland (missing `git`/`jq`-class gaps). | Read the job log; reproduce with `tests/e2e/run.sh` **in CI only** on shared hosts. |
 | `Coverage gate` | `coverage-gate.yml` | Test coverage fell under `.coverage-thresholds.json`. | Add tests; never lower the threshold to pass. |
 | `Agent tooling (node --test)` | `agent-tooling.yml` | A Node script or hook (`scripts/`, `.claude/hooks/`) is broken. | `node --test`. |
@@ -25,6 +25,8 @@ tooling* are sound; it does **not** prove a real kernel/akmod build works. Real 
 | Scorecard | `scorecard.yml` (P4) | Supply-chain posture changed; see README "Supply-chain scorecard". | Open the run summary. |
 | PR metrics | `pr-metrics.yml`, [`docs/metrics/`](metrics/README.md) | Trend, not gate: acceptance, TTM, agent share, reverts. | Compare latest snapshot to previous. |
 | Agent audit / nightly compliance | `agent-audit.yml`, `nightly-compliance.yml` | Agent activity or repo invariants drifted. | See [ai-ops-runbook.md](ai-ops-runbook.md). |
+| Auto issues | `auto-issues.yml` (weekly) | Upstream has commits the fork has not merged for a week or more, or the condition for removing fork patch T6 is met. It opens, refreshes and closes one issue per signal. | Follow the issue: the upstream merge procedure in [AGENTS.md](../AGENTS.md), or the T6 entry of [FORK-PATCHES.md](../FORK-PATCHES.md). |
+| Auto-QA | `auto-qa.yml` (weekly) | The Node tests failed as its smoke check, or a workflow in `.github/auto-qa-tuning.json` flaked often enough on `main` that it proposes a retry change. | Read the `Auto-QA: flaky-check tuning proposed` issue and apply its diff in a pull request. |
 
 ## Mutation check on changed lines
 
