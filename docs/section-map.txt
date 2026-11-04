@@ -221,9 +221,9 @@
 ## Why
   prose: narrative: why main needs a ruleset
 ## The ruleset
-  prose: unchecked: the rules and the seven required checks, which policies/ruleset.json checks in .github/rulesets/main.json but not here
+  joined: scripts/tests/branch-protection-page.test.mjs
 ## Merge queue (#45)
-  prose: narrative: why there is no merge queue and what replaces it
+  joined: scripts/tests/branch-protection-page.test.mjs
 ## Apply
   prose: narrative: the gh api command to create the ruleset
 ## Verify
@@ -233,7 +233,7 @@
 ### Renaming a required check
   prose: narrative: the order of steps for renaming a required check
 ## When there is a second reviewer
-  prose: narrative: which settings to change once there is a second reviewer
+  joined: scripts/tests/branch-protection-page.test.mjs
 
 [docs/change-classification.md]
 ## Procedure
@@ -275,7 +275,7 @@
 ## Blockers
   prose: unchecked: names the signing paths and upstream-owned files a change must leave alone
 ## Should-fix
-  prose: unchecked: names the required check names, which .github/rulesets/main.json holds
+  joined: scripts/tests/branch-protection-page.test.mjs
 ## Nice-to-have
   prose: narrative: review suggestions
 ## Reviewer output format
