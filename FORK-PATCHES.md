@@ -241,6 +241,18 @@ with upstream's script in the #198 sync; the T5 test, the T5 check in `tests/uni
 - **Remove when:** upstream fetches the keys by full fingerprint (or ships them in the repository).
 
 
+### T8 — `RPMFUSION_MIRROR` rewrite finds the repo files in either directory
+
+- **Files:** `build_files/prep/build-prep.sh` (the `RPMFUSION_MIRROR` block)
+- **What:** the two `sed` calls take every `rpmfusion-*.repo` file found under `/etc/yum.repos.d/` or
+  `/usr/share/dnf5/repos.d/`, and the script exits 1 with a message if neither directory has one.
+  Upstream only globs `/etc/yum.repos.d/`.
+- **Why:** from Fedora 45 the `rpmfusion-*-release` packages install their `.repo` files under
+  `/usr/share/dnf5/repos.d/`. The unmatched glob stayed literal, `sed` exited 2 and `set -euo pipefail`
+  stopped the build, so the documented `RPMFUSION_MIRROR` option failed on 45 and later. CI never sets
+  the variable, which is why nothing caught it. Fixed for #236.
+- **Remove when:** upstream's `RPMFUSION_MIRROR` block looks in `/usr/share/dnf5/repos.d/` too.
+
 ### ZFS build tools on the `main` flavor
 
 Not a patch: the shared root cause of T4 and T6 (and the retired T5), written down so the next instance is caught at the
