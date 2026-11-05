@@ -47,8 +47,16 @@ fi
 if [[ -n "${RPMFUSION_MIRROR}" && -f /etc/fedora-release ]]; then
     # force use of single rpmfusion mirror
     echo "Using single rpmfusion mirror: ${RPMFUSION_MIRROR}"
-    sed -i.bak "s%^metalink=%#metalink=%" /etc/yum.repos.d/rpmfusion-*.repo
-    sed -i "s%^#baseurl=http://download1.rpmfusion.org%baseurl=${RPMFUSION_MIRROR}%" /etc/yum.repos.d/rpmfusion-*.repo
+    # rpmfusion-*-release moved its repo files to /usr/share/dnf5/repos.d in F45
+    shopt -s nullglob
+    rpmfusion_repos=(/etc/yum.repos.d/rpmfusion-*.repo /usr/share/dnf5/repos.d/rpmfusion-*.repo)
+    shopt -u nullglob
+    if [[ ${#rpmfusion_repos[@]} -eq 0 ]]; then
+        echo "No rpmfusion repo files found to point at ${RPMFUSION_MIRROR}" >&2
+        exit 1
+    fi
+    sed -i.bak "s%^metalink=%#metalink=%" "${rpmfusion_repos[@]}"
+    sed -i "s%^#baseurl=http://download1.rpmfusion.org%baseurl=${RPMFUSION_MIRROR}%" "${rpmfusion_repos[@]}"
 fi
 
 ### PREPARE BUILD ENV

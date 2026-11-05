@@ -136,3 +136,48 @@ setup() {
     [ "${status}" -eq 0 ]
     [[ "${output}" != *ogc* ]]
 }
+
+# Runs build-prep.sh's RPMFUSION_MIRROR block against a scratch root, with the
+# absolute paths it names redirected into ${BATS_TEST_TMPDIR}/root.
+run_mirror_block() {
+    local block
+    block="$(awk '/^if \[\[ -n "\$\{RPMFUSION_MIRROR\}"/{f=1} f{print} f&&/^fi$/{exit}' "${REPO_ROOT}/build_files/prep/build-prep.sh")"
+    [ -n "${block}" ]
+    block="${block//\/etc\//${BATS_TEST_TMPDIR}/root/etc/}"
+    block="${block//\/usr\/share\//${BATS_TEST_TMPDIR}/root/usr/share/}"
+    RPMFUSION_MIRROR="https://mirror.example/rpmfusion" run bash -euo pipefail -c "${block}"
+}
+
+# covers: T8
+@test "T8: RPMFUSION_MIRROR rewrites repo files under /usr/share/dnf5/repos.d (Fedora 45+)" {
+    local dir="${BATS_TEST_TMPDIR}/root/usr/share/dnf5/repos.d"
+    mkdir -p "${dir}" "${BATS_TEST_TMPDIR}/root/etc"
+    touch "${BATS_TEST_TMPDIR}/root/etc/fedora-release"
+    printf 'metalink=https://m\n#baseurl=http://download1.rpmfusion.org/free\n' > "${dir}/rpmfusion-free.repo"
+    run_mirror_block
+    [ "${status}" -eq 0 ]
+    run cat "${dir}/rpmfusion-free.repo"
+    [[ "${output}" == *'#metalink=https://m'* ]]
+    [[ "${output}" == *'baseurl=https://mirror.example/rpmfusion/free'* ]]
+}
+
+# covers: T8
+@test "T8: RPMFUSION_MIRROR still rewrites repo files under /etc/yum.repos.d (Fedora 43, 44)" {
+    local dir="${BATS_TEST_TMPDIR}/root/etc/yum.repos.d"
+    mkdir -p "${dir}"
+    touch "${BATS_TEST_TMPDIR}/root/etc/fedora-release"
+    printf 'metalink=https://m\n#baseurl=http://download1.rpmfusion.org/free\n' > "${dir}/rpmfusion-free.repo"
+    run_mirror_block
+    [ "${status}" -eq 0 ]
+    run cat "${dir}/rpmfusion-free.repo"
+    [[ "${output}" == *'baseurl=https://mirror.example/rpmfusion/free'* ]]
+}
+
+# covers: T8
+@test "T8: RPMFUSION_MIRROR fails with a clear message when no repo file exists" {
+    mkdir -p "${BATS_TEST_TMPDIR}/root/etc"
+    touch "${BATS_TEST_TMPDIR}/root/etc/fedora-release"
+    run_mirror_block
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *'No rpmfusion repo files found'* ]]
+}
