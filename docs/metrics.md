@@ -7,8 +7,7 @@ What this fork measures about its own pull requests, how each number is defined,
 ## Population
 
 Every **closed** pull request in `Danathar/akmods` (merged or not), optionally limited by `--since`.
-Open PRs are never counted. This repo is small (single digits of PRs at the time of writing), so
-every figure is a description of a handful of events, not a statistic. Read the counts next to the rates.
+Open PRs are never counted. A small group moves a rate a long way, so read the counts next to the rates.
 
 ## Metrics
 
@@ -37,5 +36,6 @@ every figure is a description of a handful of events, not a statistic. Read the 
 node scripts/pr-metrics.mjs                                  # gh api, writes docs/metrics/<today>.{md,json}
 node scripts/pr-metrics.mjs --since 2026-10-01 --stdout      # print only
 node scripts/pr-metrics.mjs --input prs.json --out-dir /tmp/m   # offline, REST pull-request array
-node --test scripts/tests                                    # tests
+node scripts/pr-metrics.mjs --repo OWNER/REPO --date 2026-10-01 # another repository, files named for that date
+node --test                                                  # tests
 ```

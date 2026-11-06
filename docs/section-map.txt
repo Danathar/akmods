@@ -247,13 +247,13 @@
 
 [docs/metrics.md]
 ## Population
-  prose: unchecked: which pull requests scripts/pr-metrics.mjs counts
+  joined: scripts/tests/metrics-page.test.mjs
 ## Metrics
-  prose: unchecked: metric definitions computed by scripts/pr-metrics.mjs
+  joined: scripts/tests/metrics-page.test.mjs
 ## Known limits
-  prose: unchecked: how scripts/pr-metrics.mjs detects agent pull requests
+  joined: scripts/tests/metrics-page.test.mjs
 ## Running it
-  prose: unchecked: scripts/pr-metrics.mjs options and output paths
+  joined: scripts/tests/metrics-page.test.mjs
 
 [docs/multi-agent.md]
 ## Roles
