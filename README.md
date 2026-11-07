@@ -6,7 +6,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ublue-os/akmods/badge)](https://scorecard.dev/viewer/?uri=github.com/ublue-os/akmods)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-1f6feb)](https://deepwiki.com/Danathar/akmods)
 [![Maintenance assisted by Hivecommons Hive](https://img.shields.io/badge/maintenance%20assisted%20by-Hivecommons%20Hive-1f6feb)](https://github.com/hivecommons/hive)
-[![ACMM L6 Fully Autonomous](https://img.shields.io/badge/ACMM-L6%20Fully%20Autonomous-2da44e)](#maintained-with-hive-acmm-l6)
+[![ACMM L6 Autonomous](https://img.shields.io/badge/ACMM-L6%20Autonomous-2da44e)](#maintained-with-hive-acmm-l6)
 [![AI assisted](https://img.shields.io/badge/AI-assisted-d29922)](#about-this-project)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
@@ -34,7 +34,7 @@ The Scorecard badge above tracks the public OpenSSF result for `ublue-os/akmods`
 
 ## Maintained with Hive (ACMM L6)
 
-Maintenance of this fork is assisted by [Hivecommons Hive](https://github.com/hivecommons/hive) at ACMM level 6 (Fully Autonomous). The fork is maintained by [@Danathar](https://github.com/Danathar). Upstream `ublue-os/akmods` is not managed by Hive.
+Maintenance of this fork is assisted by [Hivecommons Hive](https://github.com/hivecommons/hive) at ACMM level 6 (Autonomous). The fork is maintained by [@Danathar](https://github.com/Danathar). Upstream `ublue-os/akmods` is not managed by Hive.
 
 What L6 permits here:
 

@@ -21,7 +21,7 @@ replacement for `ublue-os/akmods`.
 
 ## ACMM stance
 
-The Hive ACMM evaluation scores repo maturity. This fork targets **Level 6 (Fully Autonomous) for the process layer** —
+The Hive ACMM evaluation scores repo maturity. This fork targets **Level 6 (Autonomous) for the process layer** —
 CI contract, agent instructions, guardrails, policies, metrics, runbook, task ledger, orchestration — while keeping the
 *build* layer deliberately manual: nothing here may autonomously push images, enable disabled workflows, touch signing
 material, or merge. Autonomy is bounded by [risk tiers](risk-tiers.md) and the
