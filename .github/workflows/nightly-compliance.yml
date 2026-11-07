@@ -9,7 +9,8 @@ name: Nightly compliance
 #   - node --test
 #   - shellcheck via tests/lint-shellcheck.sh (two tiers)
 #   - actionlint
-#   - node scripts/check-policies.mjs
+#   - node scripts/check-policies.mjs, and a compare of the check-policies
+#     corpus with its canonical copy in Danathar/dns-failover
 #   - tests/e2e/run.sh in a Fedora container (no kernel download, no build)
 #
 # On a scheduled or manual run on main the `report` job keeps ONE tracking
@@ -155,6 +156,24 @@ jobs:
             if [ "$attempt" -gt "$retries" ]; then exit 1; fi
             echo "::warning::check-policies failed; retry $attempt of $retries"
           done
+
+      # policies/check-policies-corpus.json is a copy of the canonical file in
+      # Danathar/dns-failover (Danathar/akmods#245). The checker test pins the
+      # copy's hash, which catches a local edit but not a copy that has fallen
+      # behind its original, so this compares it with dns-failover's main.
+      - name: Compare the check-policies corpus with dns-failover
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CORPUS: policies/check-policies-corpus.json
+        run: |
+          set -euo pipefail
+          want=$(gh api "repos/Danathar/dns-failover/contents/$CORPUS" -H 'Accept: application/vnd.github.raw' | sha256sum | cut -d' ' -f1)
+          got=$(sha256sum "$CORPUS" | cut -d' ' -f1)
+          if [ "$got" != "$want" ]; then
+            echo "::error::$CORPUS is $got; Danathar/dns-failover main has $want. Copy the file from there and update CORPUS_SHA256 in scripts/tests/check-policies.test.mjs."
+            exit 1
+          fi
+          echo "$CORPUS matches Danathar/dns-failover main ($got)."
 
   e2e:
     name: E2E (fedora container)

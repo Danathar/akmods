@@ -200,9 +200,8 @@ export function checkWorkflows(root, policy, upstreamGlobs, files) {
 
     for (const f of workflows) {
         const forkLocal = !matchesAny(upstreamGlobs, f);
-        const code = readText(root, f)
-            .split(/\r?\n/)
-            .map((l) => l.replace(/(^|\s)#.*$/, ''));
+        const lines = readText(root, f).split(/\r?\n/);
+        const code = lines.map((l) => l.replace(/(^|\s)#.*$/, ''));
 
         code.forEach((l, i) => {
             for (const trigger of policy.forbiddenTriggers) {
@@ -230,8 +229,10 @@ export function checkWorkflows(root, policy, upstreamGlobs, files) {
         if (policy.requireTopLevelPermissions) {
             v.push(...checkTopLevelPermissions(f, code, policy));
         }
+        // Raw lines: inside a quoted scalar or a `run: |` block a `#` is not a
+        // YAML comment, and GitHub still substitutes an expression after it.
         if (policy.forbiddenRunExpressions) {
-            v.push(...checkRunExpressions(f, code, policy));
+            v.push(...checkRunExpressions(f, lines, policy));
         }
     }
     return v;

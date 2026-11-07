@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "about": [
+    "Workflows every copy of scripts/check-policies.mjs in the fleet has to judge the same way.",
+    "Each row is one workflow file (workflow, one string per line) and the run-expression violations the checker must report for it:",
+    "violations lists every { line, expression } that checkWorkflows reports as an expression in a run script, and nothing else. An empty list means the workflow must pass.",
+    "One row per fixed bypass: a fix to any copy of the checker adds a row here, so every copy without the fix fails its tests.",
+    "The canonical copy lives in Danathar/dns-failover (policies/check-policies-corpus.json). Change it there first, then copy it byte for byte; each other copy pins its SHA-256."
+  ],
+  "rows": [
+    {
+      "id": "hash-before-expression",
+      "class": "comment stripping",
+      "fixed": "Danathar/dns-failover 1cd9b43; reported in Danathar/akmods#245",
+      "why": "a space and # before the expression is not a YAML comment inside a run scalar, and GitHub still substitutes the issue title into the command",
+      "workflow": [
+        "name: check-policies-corpus",
+        "on:",
+        "  issues:",
+        "permissions:",
+        "  contents: read",
+        "jobs:",
+        "  a:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - name: hash",
+        "        run: echo \"Issue #${{ github.event.issue.title }}\""
+      ],
+      "violations": [
+        {
+          "line": 11,
+          "expression": "github.event.issue.title"
+        }
+      ]
+    },
+    {
+      "id": "hash-inside-quoted-scalar",
+      "class": "comment stripping",
+      "fixed": "Danathar/dns-failover 1cd9b43",
+      "why": "a # inside a double-quoted run scalar is part of the string, so the expression after it still reaches the shell",
+      "workflow": [
+        "name: check-policies-corpus",
+        "on:",
+        "  issues:",
+        "permissions:",
+        "  contents: read",
+        "jobs:",
+        "  a:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - run: \"echo # ${{ github.event.issue.title }}\""
+      ],
+      "violations": [
+        {
+          "line": 10,
+          "expression": "github.event.issue.title"
+        }
+      ]
+    },
+    {
+      "id": "hash-inside-block-scalar",
+      "class": "comment stripping",
+      "fixed": "Danathar/dns-failover 1cd9b43",
+      "why": "every line of a run: | block is script text, so a # in it hides nothing from GitHub's substitution",
+      "workflow": [
+        "name: check-policies-corpus",
+        "on:",
+        "  issues:",
+        "permissions:",
+        "  contents: read",
+        "jobs:",
+        "  a:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - run: |",
+        "          echo \"Issue body follows\"",
+        "          echo \"Body # ${{ github.event.issue.body }}\""
+      ],
+      "violations": [
+        {
+          "line": 12,
+          "expression": "github.event.issue.body"
+        }
+      ]
+    },
+    {
+      "id": "allow-env-and-number-after-hash",
+      "class": "comment stripping",
+      "fixed": "Danathar/dns-failover 1cd9b43",
+      "why": "the safe spellings stay allowed once # is no longer stripped: the title passed through env:, and the issue number, which is not attacker text",
+      "workflow": [
+        "name: check-policies-corpus",
+        "on:",
+        "  issues:",
+        "permissions:",
+        "  contents: read",
+        "jobs:",
+        "  a:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - name: env",
+        "        env:",
+        "          TITLE: ${{ github.event.issue.title }}",
+        "        run: echo \"Issue #${{ github.event.issue.number }}: $TITLE\""
+      ],
+      "violations": []
+    }
+  ]
+}
