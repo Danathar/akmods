@@ -32,6 +32,13 @@ Rules:
   block outside `certs/*.priv.test`, fails CI. If a key is ever committed,
   treat it as compromised: stop, tell the owner, do not try to scrub history
   yourself.
+- Never put a secret on a command line. A program's arguments are readable
+  by every process on the machine (`/proc/<pid>/cmdline`), so a token passed
+  as `-p`, `--password`, `--creds` or `--registry-password`, or inside a
+  `user:$TOKEN@` URL, leaks to anything else on the build host. Pipe it in
+  (`printf '%s' "$TOKEN" | podman login ... --password-stdin`) or write it to
+  a file. `policies/secret-argv.json` fails CI on such a line in the
+  `Justfile` or in any workflow's `run:` script.
 - Do not set up `GITHUB_TOKEN`, PAT or registry credentials in files, prompts
   or commit messages. The fork currently has no repository secrets
   (`FORK-PATCHES.md`), so any workflow change that suddenly needs one is a

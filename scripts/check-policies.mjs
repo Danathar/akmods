@@ -18,6 +18,9 @@
  *   5. policies/ruleset.json              .github/rulesets/main.json shape
  *   6. docs/risk-tiers.md vs risk-config.json: table drift, and every
  *      risk-config path matches a tracked file (except `pending` globs)
+ *   7. policies/secret-argv.json          no secret on a command line (a
+ *                                         credential flag or user:$TOKEN@ URL)
+ *                                         in the Justfile or a workflow run:
  *
  * Node built-ins only. Exit code 1 when any violation is found.
  */
@@ -447,6 +450,82 @@ export function checkRiskTiers(config, markdown, files) {
     return v;
 }
 
+// ------------------------------------------------------- 7. secret argv
+
+/**
+ * Lines of every `run:` script in a workflow, as [{ line, text }] with
+ * 1-based physical line numbers. A `run: |` header contributes its indicator.
+ */
+export function runScriptLines(lines) {
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(/^(\s*(?:-\s+)?)run\s*:\s*(.*)$/);
+        if (!m) continue;
+        const indent = m[1].length;
+        out.push({ line: i + 1, text: m[2] });
+        let j = i + 1;
+        for (; j < lines.length; j++) {
+            if (!isBlank(lines[j]) && indentOf(lines[j]) <= indent) break;
+            out.push({ line: j + 1, text: lines[j] });
+        }
+        i = j - 1;
+    }
+    return out;
+}
+
+/** Join trailing-backslash continuations in [{ line, text }] (keeps the first line number). */
+function joinContinuations(entries) {
+    const out = [];
+    for (let i = 0; i < entries.length; i++) {
+        let { line, text } = entries[i];
+        while (/\\\s*$/.test(text) && i + 1 < entries.length) {
+            text = text.replace(/\\\s*$/, ' ') + entries[++i].text.trim();
+        }
+        out.push({ line, text });
+    }
+    return out;
+}
+
+/**
+ * The secret-on-argv findings for one shell command: a credential flag whose
+ * value references a secret, or a secret embedded as `user:$TOKEN@` in a URL.
+ * Piping the value in (`printf '%s' "$TOKEN" | ... --password-stdin`) or
+ * writing it to a file (`printf ... > file`) passes: printf is a builtin.
+ */
+export function secretArgvFindings(text, policy) {
+    if (/^\s*#/.test(text)) return [];
+    const secret = new RegExp(policy.secretReference, 'i');
+    const url = new RegExp(`(?:\\/\\/|:)(?:${policy.secretReference})@`, 'i');
+    const found = [];
+    for (const m of text.matchAll(new RegExp(policy.credentialFlagPattern, 'g'))) {
+        if (secret.test(m[3])) found.push(`${m[1] ?? m[2]} ${m[3]}`);
+    }
+    const u = text.match(url);
+    if (u) found.push(`${u[0]} in a URL`);
+    return found;
+}
+
+export function checkSecretArgv(root, policy, files) {
+    const v = [];
+    const advice = 'pass it on stdin (printf \'%s\' "$TOKEN" | ... --password-stdin) or in a file, never as an argument';
+    for (const f of files) {
+        let entries;
+        if (matchesAny(policy.justfileGlobs, f)) {
+            entries = logicalLines(readText(root, f));
+        } else if (matchesAny(policy.workflowGlobs, f)) {
+            entries = joinContinuations(runScriptLines(readText(root, f).split(/\r?\n/)));
+        } else {
+            continue;
+        }
+        for (const { line, text } of entries) {
+            for (const what of secretArgvFindings(text, policy)) {
+                v.push(`${f}:${line}: secret on a command line (${what}); ${advice}`);
+            }
+        }
+    }
+    return v;
+}
+
 // ------------------------------------------------------------------- main
 
 export function checkAll(root) {
@@ -470,6 +549,9 @@ export function checkAll(root) {
 
     const ruleset = readJson(root, 'policies/ruleset.json', violations);
     if (ruleset) violations.push(...checkRuleset(root, ruleset));
+
+    const argv = readJson(root, 'policies/secret-argv.json', violations);
+    if (argv) violations.push(...checkSecretArgv(root, argv, files));
 
     const config = readJson(root, 'risk-config.json', violations);
     if (!fs.existsSync(path.join(root, 'docs/risk-tiers.md'))) {

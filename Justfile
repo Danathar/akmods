@@ -705,7 +705,7 @@ test: (cache-kernel-version) (fetch-kernel)
 # Login to Registry
 [group('Registry')]
 @login:
-    {{ podman }} login {{ registry }} -u "$REGISTRY_ACTOR"  -p "$REGISTRY_TOKEN"
+    printf '%s' "$REGISTRY_TOKEN" | {{ podman }} login {{ registry }} -u "$REGISTRY_ACTOR" --password-stdin
 
 # Push Images to Registry
 [group('Registry')]
