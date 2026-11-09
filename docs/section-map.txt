@@ -136,6 +136,8 @@
   joined: .coverage-thresholds.json
 ### T8 — `RPMFUSION_MIRROR` rewrite finds the repo files in either directory
   joined: .coverage-thresholds.json
+### T9 — `just login` passes the registry token on stdin
+  joined: .coverage-thresholds.json
 ### ZFS build tools on the `main` flavor
   joined: tests/unit/zfs_flavor_deps.bats
 ## Related

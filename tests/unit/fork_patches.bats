@@ -181,3 +181,22 @@ run_mirror_block() {
     [ "${status}" -eq 1 ]
     [[ "${output}" == *'No rpmfusion repo files found'* ]]
 }
+
+# covers: T9
+@test "T9: just login hands the registry token to podman on stdin, never in its arguments" {
+    local log="${BATS_TEST_TMPDIR}/podman"
+    # Replace the stub with one that records what podman would have received.
+    cat >"${BATS_TEST_TMPDIR}/stubs/podman" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >"${log}.argv"
+cat >"${log}.stdin"
+STUB
+    cd "${WORK}" || return 1
+    REGISTRY_ACTOR=fork-bot REGISTRY_TOKEN=not-a-real-token run "${JUST_BIN}" login
+    [ "${status}" -eq 0 ]
+    run cat "${log}.argv"
+    [[ "${output}" == 'login '*' -u fork-bot --password-stdin' ]]
+    [[ "${output}" != *not-a-real-token* ]]
+    run cat "${log}.stdin"
+    [ "${output}" = "not-a-real-token" ]
+}

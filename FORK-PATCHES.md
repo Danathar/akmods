@@ -253,6 +253,21 @@ with upstream's script in the #198 sync; the T5 test, the T5 check in `tests/uni
   the variable, which is why nothing caught it. Fixed for #236.
 - **Remove when:** upstream's `RPMFUSION_MIRROR` block looks in `/usr/share/dnf5/repos.d/` too.
 
+### T9 — `just login` passes the registry token on stdin
+
+- **Files:** `Justfile` (`login` recipe)
+- **What:** `podman login {{ registry }} -u "$REGISTRY_ACTOR" -p "$REGISTRY_TOKEN"` became
+  `printf '%s' "$REGISTRY_TOKEN" | podman login {{ registry }} -u "$REGISTRY_ACTOR" --password-stdin`.
+- **Why:** with `-p` the shell expands the token into `podman`'s arguments, and any process on the build
+  machine can read a running program's arguments from `/proc/<pid>/cmdline`. `printf` is a shell
+  builtin, so the token is in no program's arguments. `zfs-aurora-complex` and `zfs-kinoite-complex`
+  run this recipe from a checkout of this fork's `main`, so the fix reaches them without a change there.
+  Fixed for #248 (part of Danathar/zfs-aurora-complex#283).
+- **Merge note:** if upstream rewrites the recipe, keep `--password-stdin`. `policies/secret-argv.json`
+  fails `policy-check` when a secret goes back on a command line in the `Justfile` or in any
+  workflow's `run:` script, and `tests/unit/fork_patches.bats` (T9) checks what `podman` receives.
+- **Remove when:** upstream's `login` recipe reads the token from stdin.
+
 ### ZFS build tools on the `main` flavor
 
 Not a patch: the shared root cause of T4 and T6 (and the retired T5), written down so the next instance is caught at the

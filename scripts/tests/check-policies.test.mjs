@@ -11,10 +11,12 @@ import {
     checkRepoTarget,
     checkRiskTiers,
     checkRuleset,
+    checkSecretArgv,
     checkSigningKeys,
     checkWorkflows,
     classify,
     globToRegExp,
+    secretArgvFindings,
     walk,
 } from '../check-policies.mjs';
 
@@ -192,6 +194,87 @@ test('repo-target: upstream-owned files and AGENTS.md literal', () => {
     assert.match(checkRepoTarget(a.root, policy('repo-target'), upstream, a.files).join('\n'), /Danathar\/akmods/);
     const b = tree({ 'AGENTS.md': 'Danathar/akmods only\n' });
     assert.deepEqual(checkRepoTarget(b.root, policy('repo-target'), upstream, b.files), []);
+});
+
+// ------------------------------------------------------------- secret argv
+
+// The `@login` recipe as it was before #248: the shell expands the token into
+// podman's argv, which /proc/<pid>/cmdline shows to every process.
+const OLD_LOGIN = '    {{ podman }} login {{ registry }} -u "$REGISTRY_ACTOR"  -p "$REGISTRY_TOKEN"';
+const NEW_LOGIN = `    printf '%s' "$REGISTRY_TOKEN" | {{ podman }} login {{ registry }} -u "$REGISTRY_ACTOR" --password-stdin`;
+
+test('secret-argv: the old @login recipe fails (regression for #248)', () => {
+    const { root, files } = tree({ Justfile: `# Login to Registry\n@login:\n${OLD_LOGIN}\n` });
+    const v = checkSecretArgv(root, policy('secret-argv'), files);
+    assert.equal(v.length, 1);
+    assert.match(v[0], /^Justfile:3: secret on a command line \(-p "\$REGISTRY_TOKEN"\)/);
+});
+
+test('secret-argv: the @login recipe piping the token to --password-stdin passes', () => {
+    const { root, files } = tree({ Justfile: `# Login to Registry\n@login:\n${NEW_LOGIN}\n` });
+    assert.deepEqual(checkSecretArgv(root, policy('secret-argv'), files), []);
+});
+
+test('secret-argv: a secret as a credential flag or in a URL is reported', () => {
+    for (const line of [
+        OLD_LOGIN,
+        'docker login -u me -p ${{ github.token }} ghcr.io',
+        'docker login -u me -p${{ secrets.PAT }} ghcr.io',
+        'podman login --password "$DB_PASSWORD" quay.io',
+        'podman login --password=$REGISTRY_SECRET quay.io',
+        'deploy --registry-password "$token" x',
+        'skopeo copy --creds "me:$GH_TOKEN" docker://a docker://b',
+        'skopeo copy --src-creds=me:${SRC_TOKEN} a b',
+        "skopeo copy --dest-creds me:${{ secrets['GHCR_PAT'] }} a b",
+        'podman login -u me -p {{ registry_token }} ghcr.io',
+        'git push https://x-access-token:$GITHUB_TOKEN@github.com/o/r',
+        'git clone "https://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab.com/o/r"',
+        'curl -fsS https://${API_TOKEN}@example.com/x',
+    ]) {
+        assert.equal(secretArgvFindings(line, policy('secret-argv')).length, 1, line);
+    }
+});
+
+test('secret-argv: stdin, a file, comments and non-secret values pass', () => {
+    for (const line of [
+        NEW_LOGIN,
+        `printf '%s' "$GH_TOKEN" | podman login ghcr.io -u me --password-stdin`,
+        `printf '%s' "\${{ secrets.PAT }}" > "$RUNNER_TEMP/token"`,
+        'podman login -u "$REGISTRY_ACTOR" --password-stdin ghcr.io',
+        'mkdir -p certs "$RUNNER_TEMP/actionlint"',
+        'psql -p "$PGPORT" -U "$PGUSER"',
+        'skopeo copy "docker://$IMAGE:$TAG" "dir:$destination"',
+        '# never: podman login -p "$REGISTRY_TOKEN"',
+    ]) {
+        assert.deepEqual(secretArgvFindings(line, policy('secret-argv')), [], line);
+    }
+});
+
+test('secret-argv: workflow run scripts are checked, env: and continuations included', () => {
+    const body = GOOD_WF.replace('      - run: echo hi', [
+        '      - run: docker login ghcr.io -u me -p "${{ secrets.REGISTRY_PASSWORD }}"',
+        '      - name: multi',
+        '        env:',
+        '          GH_TOKEN: ${{ github.token }}',
+        '        run: |',
+        '          skopeo copy \\',
+        '            --creds "me:$GH_TOKEN" docker://a docker://b',
+        '          git clone "https://x-access-token:${GH_TOKEN}@github.com/o/r"',
+        '          podman login --password=$REGISTRY_SECRET quay.io',
+        '          deploy --registry-password "$TOKEN" x',
+        `          printf '%s' "$GH_TOKEN" | podman login ghcr.io -u me --password-stdin`,
+        `          printf '%s' "$GH_TOKEN" > "$RUNNER_TEMP/token"`,
+        '          mkdir -p certs',
+        '          # never: podman login -p "$GH_TOKEN"',
+    ].join('\n'));
+    // Upstream-owned workflows are held to this rule too.
+    const { root, files } = tree({ '.github/workflows/reusable-build.yml': body });
+    const v = checkSecretArgv(root, policy('secret-argv'), files);
+    assert.deepEqual(v.map((x) => x.match(/^[^:]+:(\d+):/)[1]).map(Number), [11, 16, 18, 19, 20]);
+});
+
+test('secret-argv: the real Justfile and workflows pass', () => {
+    assert.deepEqual(checkSecretArgv(repo, policy('secret-argv'), walk(repo)), []);
 });
 
 // ------------------------------------------------------------ fork patches
