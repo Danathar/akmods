@@ -41,24 +41,35 @@ echo "getting zfs-${ZFS_VERSION}.tar.gz"
 "${CURL[@]}" -O "https://github.com/openzfs/zfs/releases/download/zfs-${ZFS_VERSION}/zfs-${ZFS_VERSION}.tar.gz.asc"
 "${CURL[@]}" -O "https://github.com/openzfs/zfs/releases/download/zfs-${ZFS_VERSION}/zfs-${ZFS_VERSION}.sha256.asc"
 
-echo "Import key"
+echo "Import pinned OpenZFS release keys"
 # https://openzfs.github.io/openzfs-docs/Project%20and%20Community/Signing%20Keys.html
-# Full fingerprints, not 8-digit short IDs: anyone can upload a key whose short ID
-# collides, and gpg imports every key that matches. With a full fingerprint gpg
-# drops any returned key that does not match it.
-gpg --yes --keyserver hkps://keyserver.ubuntu.com --recv-keys 4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027 # Tony Hutter
-gpg --yes --keyserver hkps://keyserver.ubuntu.com --recv-keys 29D5610EAE2941E355A2FE8AB97467AAC77B9667 # Ned Bass
-gpg --yes --keyserver hkps://keyserver.ubuntu.com --recv-keys C33DF142657ED1F7C328A2960AB9E991C6AF658B # Brian Behlendorf
+# Keys are pinned in the repo, not fetched from a keyserver: a keyserver outage must not
+# break builds, and a keyserver must not be able to hand us a different key. Auto key
+# retrieval is disabled so gpg never reaches out during verification.
+export GNUPGHOME
+GNUPGHOME="$(mktemp -d)"
+trap 'rm -rf "${GNUPGHOME}"' EXIT
+printf '%s\n' no-auto-key-retrieve disable-dirmngr > "${GNUPGHOME}/gpg.conf"
+gpg --batch --import /tmp/openzfs-release-keys.asc
+# Sorted full fingerprints of the primary keys: Ned Bass, Tony Hutter, Brian Behlendorf.
+if ! diff -u <(printf '%s\n' \
+    29D5610EAE2941E355A2FE8AB97467AAC77B9667 \
+    4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027 \
+    C33DF142657ED1F7C328A2960AB9E991C6AF658B) \
+    <(gpg --batch --with-colons --list-keys | awk -F: '$1 == "pub" { primary = 1; next } primary && $1 == "fpr" { print $10; primary = 0 }' | LC_ALL=C sort); then
+    echo "OpenZFS key fingerprints differ from the pinned list; see README.md" >&2
+    exit 1
+fi
 
 echo "Verifying tar.gz signature"
 if ! gpg --verify "zfs-${ZFS_VERSION}.tar.gz.asc" "zfs-${ZFS_VERSION}.tar.gz"; then
-    echo "ZFS tarball signature verification FAILED! Exiting..."
+    echo "ZFS tarball signature verification FAILED! See README.md for OpenZFS key updates." >&2
     exit 1
 fi
 
 echo "Verifying checksum signature"
 if ! gpg --verify "zfs-${ZFS_VERSION}.sha256.asc"; then
-    echo "Checksum signature verification FAILED! Exiting..."
+    echo "Checksum signature verification FAILED! See README.md for OpenZFS key updates." >&2
     exit 1
 fi
 
