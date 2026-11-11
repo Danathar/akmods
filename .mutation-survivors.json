@@ -42,6 +42,62 @@
             "original": "left <= 0",
             "replacement": "left < 0",
             "reason": "Equivalent in what is counted: left is exactly 0 only when the check lands on the deadline millisecond; the group then starts and a 0 ms timer cuts it at once, and a cut group's mutants are not counted, same as a group that is not run."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "Regex",
+            "original": "/(^|\\s)#.*$/",
+            "replacement": "/(^|\\s)#.*/",
+            "reason": "Equivalent: each workflow line is matched on its own, so it holds no newline and .* already runs to the end of the line without the $ anchor."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "Regex",
+            "original": "/^(\\s*(?:-\\s+)?)run\\s*:\\s*(.*)$/",
+            "replacement": "/(\\s*(?:-\\s+)?)run\\s*:\\s*(.*)$/",
+            "reason": "Harmless over-refusal: without ^ a line that has run: in the middle (a step name, say) is also read as a script, so secret-argv scans more lines, never fewer; a real run: key still matches at the start of its line."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "Regex",
+            "original": "/^(\\s*(?:-\\s+)?)run\\s*:\\s*(.*)$/",
+            "replacement": "/^(\\s*(?:-\\s+)?)run\\s*:\\s*(.*)/",
+            "reason": "Equivalent: each workflow line is matched on its own, so it holds no newline and (.*) already runs to the end of the line without the $ anchor."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "Regex",
+            "original": "/^(\\s*(?:-\\s+)?)run\\s*:\\s*(.*)$/",
+            "replacement": "/^(\\s*(?:-\\s+)?)run\\s*:\\S*(.*)$/",
+            "reason": "Equivalent: the script text keeps the spaces after run: instead of losing them, and secretArgvFindings ignores leading spaces (its comment test and credential-flag pattern both accept them)."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "!isBlank(lines[j]) && indentOf(lines[j]) <= indent",
+            "replacement": "false",
+            "reason": "Harmless over-refusal: a run block that never ends reads every later line as script text, including the later run: lines with their own line numbers, so secret-argv scans more, never less."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "EqualityOperator",
+            "original": "indentOf(lines[j]) <= indent",
+            "replacement": "indentOf(lines[j]) < indent",
+            "reason": "Harmless over-refusal: keys at the run: key's own indent (env:, shell:) are also read as script text, so secret-argv scans more, never less."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "Regex",
+            "original": "/\\\\\\s*$/",
+            "replacement": "/\\\\\\S*$/",
+            "reason": "Equivalent for findings: the two differ only when spaces follow the trailing backslash; then the backslash stays in the joined text, but a space still separates it from the next line, so the same credential flags are found."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "MethodExpression",
+            "original": "entries[++i].text.trim()",
+            "replacement": "entries[++i].text",
+            "reason": "Equivalent for findings: the continuation line keeps its indentation, which only adds spaces between the joined halves; trailing spaces are already matched by the backslash test."
         }
     ]
 }
