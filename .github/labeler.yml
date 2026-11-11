@@ -104,3 +104,5 @@
           - '.github/workflows/ai-fix.yml'
           - '.github/workflows/agent-audit.yml'
           - 'scripts/ai-audit-report.mjs'
+          - '.github/workflows/agent-signature.yml'
+          - 'scripts/check-pr-signature.mjs'

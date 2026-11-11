@@ -91,7 +91,8 @@ stated condition under which it should be deleted).
   `policies/`, `scripts/` (`*.mjs` plus `scripts/tests/`), `tests/` (bats unit, container e2e, fixtures),
   `docs/` (upstream has no `docs/`), and these workflows:
   `ci`, `coverage-gate`, `agent-tooling`, `policy-check`, `pr-metrics`, `claude`, `ai-fix`, `labeler`,
-  `auto-qa`, `nightly-compliance`, `auto-issues`, `agent-audit` (`.github/workflows/<name>.yml`).
+  `auto-qa`, `nightly-compliance`, `auto-issues`, `agent-audit`, `agent-signature`
+  (`.github/workflows/<name>.yml`).
   One upstream-owned edit: `.gitignore` gains `.claude/settings.local.json`.
 - **What:** the test suite, CI checks, policy-as-code and agent directions added to close the ACMM
   issues #7–#52 (PRs #53–#58). The required checks that guard `main` (ruleset `24902471`, see

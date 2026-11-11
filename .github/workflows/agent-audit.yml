@@ -12,6 +12,10 @@ name: Agent audit trail
 # violation), and base `main` of Danathar/akmods. Agent-made commits on main
 # are listed too. The report goes to the run summary and a workflow artifact.
 #
+# The attribution requirement is also checked on open agent PRs, while the
+# body can still be fixed, by `agent-signature.yml` (scripts/check-pr-signature.mjs,
+# which calls this script's findSignature).
+#
 # Failure model: a violation fails the run (`--strict`). It does not open an
 # issue: a red scheduled run is already visible in the Actions tab and in
 # GitHub's failure notifications, and a read-only token means a bug here cannot
