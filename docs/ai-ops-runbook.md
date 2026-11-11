@@ -65,6 +65,9 @@ footer `— hive: agent=<name>` on issues and comments.
 - ACMM gaps: issues titled `[ACMM L<n>] …` carry a criterion ID and the files that would satisfy it.
 - What agents have done: [docs/agent-tasks/](agent-tasks/README.md) (ledger), [PR metrics](metrics/README.md) (agent share,
   acceptance), the `agent-audit` workflow summaries, and `.claude/session-summary.md` for the last session.
+- The `agent-signature` workflow (job `signature`, advisory) checks the same attribution line on an open PR from the
+  Hive App or an `ai-fix/` branch, while the description can still be edited; a red `signature` means the PR body
+  lacks the `— hive: agent=<name> ...` line.
 - A PR with no recent activity and failing checks is the signal to inspect; stale agent branches are named `acmm/*`, `hive/*`,
   `claude/*`.
 - Escalate to a human when: signing secrets or rulesets are involved, upstream merge conflicts touch P1/P2, or two

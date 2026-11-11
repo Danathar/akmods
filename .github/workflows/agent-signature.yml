@@ -1,0 +1,47 @@
+name: Agent PR signature
+
+# Checks, while an agent pull request is still open, the attribution
+# requirement that `agent-audit.yml` checks only after merge: the PR body must
+# carry an agent marker, normally the `— hive: agent=<name> ...` line. A merged
+# PR's body is out of reach, so a finding in the weekly audit cannot be
+# repaired; this check catches it while the description can still be edited
+# (it reruns on `edited`).
+#
+# Runs only for the Hive GitHub App's PRs (`danathar-atomic-hive[bot]`, the
+# webhook spelling of `app/danathar-atomic-hive`) and for `ai-fix/` branches;
+# every other PR gets a skipped job. scripts/check-pr-signature.mjs calls the
+# audit's own `findSignature` from scripts/ai-audit-report.mjs, so the two
+# checks cannot drift (tests: scripts/tests/check-pr-signature.test.mjs).
+#
+# Read-only: `pull_request` (never `pull_request_target`), `contents: read`,
+# no secrets, nothing written; the runner's own Node runs the script (built-ins
+# only), so the only action is checkout. The body reaches the script only through
+# `env:`. Advisory: it is not in .github/rulesets/main.json; the owner may make
+# job `signature` required once it has run clean for a month.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-signature-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  signature:
+    if: github.event.pull_request.user.login == 'danathar-atomic-hive[bot]' || startsWith(github.event.pull_request.head.ref, 'ai-fix/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the signature line
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/check-pr-signature.mjs
