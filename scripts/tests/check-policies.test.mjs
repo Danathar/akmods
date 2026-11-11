@@ -109,6 +109,13 @@ test('workflows: pull_request_target fails (also in upstream-owned files)', () =
     assert.match(v.join('\n'), /forbidden trigger pull_request_target/);
 });
 
+test('workflows: a trigger named only in a trailing comment passes', () => {
+    const { root, files } = tree({
+        '.github/workflows/ok.yml': GOOD_WF.replace('  pull_request:', '  pull_request: # not pull_request_target'),
+    });
+    assert.deepEqual(checkWorkflows(root, policy('workflow-permissions'), upstream, files), []);
+});
+
 test('workflows: missing top-level permissions fails for fork-local only', () => {
     const body = GOOD_WF.replace('permissions:\n  contents: read\n', '');
     const local = tree({ '.github/workflows/new.yml': body });
@@ -275,6 +282,81 @@ test('secret-argv: workflow run scripts are checked, env: and continuations incl
 
 test('secret-argv: the real Justfile and workflows pass', () => {
     assert.deepEqual(checkSecretArgv(repo, policy('secret-argv'), walk(repo)), []);
+});
+
+/** Line numbers of the secret-argv findings for one workflow body. */
+function secretArgvLines(body) {
+    const { root, files } = tree({ '.github/workflows/new.yml': body });
+    return checkSecretArgv(root, policy('secret-argv'), files).map((x) => Number(x.match(/^[^:]+:(\d+):/)[1]));
+}
+
+test('secret-argv: run-key spellings YAML allows are still read as scripts', () => {
+    // GOOD_WF's run step is line 11, so a finding on it reports 11.
+    for (const step of [
+        '      -   run: podman login -u me -p "$TOKEN"',
+        '      - run : podman login -u me -p "$TOKEN"',
+    ]) {
+        assert.deepEqual(secretArgvLines(GOOD_WF.replace('      - run: echo hi', step)), [11], step);
+    }
+    // A bare `run:` whose script is the indented plain scalar on the next lines.
+    const plain = GOOD_WF.replace('      - run: echo hi', '      - run:\n          podman login -u me -p "$TOKEN"');
+    assert.deepEqual(secretArgvLines(plain), [12]);
+});
+
+test('secret-argv: a run block reads past blank lines and stops at its own end', () => {
+    const body = GOOD_WF.replace('      - run: echo hi', [
+        '      - run: |',
+        '          echo one',
+        '',
+        '          podman login -u me -p "$TOKEN"',
+        '      - run: echo two',
+        '      - run: podman login -u me --password "$TOKEN"',
+    ].join('\n'));
+    assert.deepEqual(secretArgvLines(body), [14, 16]);
+});
+
+test('secret-argv: only a trailing backslash continues a line, and the halves keep a space', () => {
+    const body = GOOD_WF.replace('      - run: echo hi', [
+        '      - run: |',
+        "          printf 'logging in\\n'",
+        '          podman login -u me -p "$TOKEN"',
+        "          echo 'a\\b'; podman login ghcr.io -u me\\",
+        '            -p "$TOKEN"',
+        '          podman login ghcr.io -u me \\',
+    ].join('\n')).trimEnd();
+    // The file's last line ends in a backslash with nothing after it: no crash.
+    assert.deepEqual(secretArgvLines(body), [13, 14]);
+});
+
+test('secret-argv: a trailing comment does not hide the command before it', () => {
+    assert.equal(secretArgvFindings('podman login -u me -p "$TOKEN" # TODO stdin', policy('secret-argv')).length, 1);
+});
+
+test('secret-argv: each finding names what leaked and how to pass it instead', () => {
+    const { root, files } = tree({
+        Justfile: '@push:\n    git push https://x:$GITHUB_TOKEN@github.com/o/r\n',
+    });
+    const v = checkSecretArgv(root, policy('secret-argv'), files);
+    assert.equal(v.length, 1);
+    assert.match(v[0], /^Justfile:2: secret on a command line \(:\$GITHUB_TOKEN@ in a URL\); pass it on stdin .*--password-stdin/);
+});
+
+test('secret-argv: files that are neither a Justfile nor a workflow are not scanned', () => {
+    const { root, files } = tree({
+        'docs/example.md': '    - run: podman login -u me -p "$REGISTRY_TOKEN"\n',
+    });
+    assert.deepEqual(checkSecretArgv(root, policy('secret-argv'), files), []);
+});
+
+test('secret-argv: checkAll runs the rule, and reports a missing policy file without crashing', () => {
+    const justfile = `# Login to Registry\n@login:\n${OLD_LOGIN}\n`;
+    const policyText = fs.readFileSync(path.join(repo, 'policies/secret-argv.json'), 'utf8');
+    const on = tree({ Justfile: justfile, 'policies/secret-argv.json': policyText });
+    assert.match(checkAll(on.root).join('\n'), /Justfile:3: secret on a command line/);
+    const off = tree({ Justfile: justfile });
+    const v = checkAll(off.root);
+    assert.ok(v.includes('policies/secret-argv.json: missing'), v.join('\n'));
+    assert.doesNotMatch(v.join('\n'), /secret on a command line/);
 });
 
 // ------------------------------------------------------------ fork patches
