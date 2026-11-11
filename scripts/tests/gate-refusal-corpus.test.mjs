@@ -107,6 +107,19 @@ test('each fleet spelling of a prefix rule covers the prefix, at a word boundary
     assert.ok(!covered('git diffx', allowPrefixes({ permissions: { allow: ['Bash(git diff:*)'] } })));
 });
 
+test('git branch is allowed only in the exact forms that list branches', () => {
+    // A wildcard rule also allows `git branch -D`, `-f` and `-M`, which delete
+    // or rewind a local branch with no prompt, and the gate does not read
+    // `git branch`. Exact rules cover no prefix, so the corpus `local ref`
+    // rows do not run here.
+    assert.ok(!covered('git branch', PREFIXES),
+        'a wildcard rule covers git branch; allow only its exact read forms');
+    assert.deepEqual(
+        settings.permissions.allow.filter((rule) => rule.startsWith('Bash(git branch')),
+        ['Bash(git branch)', 'Bash(git branch -a)', 'Bash(git branch -r)', 'Bash(git branch -v)',
+            'Bash(git branch -vv)', 'Bash(git branch --list)', 'Bash(git branch --show-current)']);
+});
+
 test('every known gap names a reachable refuse row', () => {
     for (const id of KNOWN_GAPS) {
         const row = rowsById.get(id);
