@@ -119,6 +119,6 @@ the owner switched Hive to the serialized merge lane, closing #45.
 
 1. Owner: re-run the ACMM evaluation for `akmods`.
 2. Upstream sync (#59), walking `FORK-PATCHES.md`.
-3. Before enabling any `Build *` workflow, set `KERNEL_PRIVKEY`,
-   `AKMOD_PRIVKEY_20230518` and `SIGNING_SECRET`, or harden the `-s` guard in
-   `build-prep.sh`.
+3. Before enabling any `Build *` workflow, set up the `KSIGN_*` production key,
+   the `ksign` environment and `SIGNING_SECRET` (owner only; see `FORK-PATCHES.md`,
+   "Production builds cannot succeed without the signing secrets").

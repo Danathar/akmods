@@ -13,7 +13,7 @@ them. It does not repeat the path list, so there is one place to update.
 3. The change's tier is the **most dangerous** (lowest number) of its files.
 4. Raise it, never lower it, if the content is riskier than the path
    (signing, downloads, registry names, token scopes, anything that handles
-   `KERNEL_PRIVKEY`, `AKMOD_PRIVKEY_20230518` or `SIGNING_SECRET`).
+   a `KSIGN_*` signing key or `SIGNING_SECRET`).
 5. Run the tier's required commands (the table in risk-tiers.md) and state
    the tier in the pull request description.
 6. Tier 1 and 2 changes need the owner's review. Tier 3 and 4 merge on green
@@ -31,7 +31,7 @@ them. It does not repeat the path list, so there is one place to update.
   has to satisfy `policies/workflow-permissions.json` (top-level read-only
   `permissions:`, SHA-pinned actions, no `pull_request_target`).
 - **Kmod build scripts** (tier 3) become tier 2 if they alter signing or
-  `dual-sign` behaviour, because the build scripts run as root with the
+  module-signing behaviour, because the build scripts run as root with the
   signing key present.
 - **Mixed pull requests** are classified as a whole by their highest tier.
   Splitting a docs change out of a tier 2 pull request makes review easier.

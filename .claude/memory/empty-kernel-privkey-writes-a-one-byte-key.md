@@ -1,5 +1,13 @@
 # An empty `KERNEL_PRIVKEY` writes a 1-byte key, so the test-key fallback never fires
 
+**Superseded 2026-11-12 (#259):** the signing-key port replaced `KERNEL_PRIVKEY`
+and the `-s` fallback with `KSIGN_*` keys and an explicit `KSIGN_MODE`. A
+production run on `main` without the secret now stops at once with
+`Missing signing secret: KSIGN_20240711`. The lesson still holds: a green PR
+check predicts nothing about a production run. Current state: `FORK-PATCHES.md`,
+"Production builds cannot succeed without the signing secrets". The rest of this
+note is history.
+
 **Date:** 2026-10-11
 **Wrong:** treating a green `pull_request` build as proof that a scheduled or
 `workflow_dispatch` build will pass, or enabling a `Build *` workflow without

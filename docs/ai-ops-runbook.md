@@ -8,14 +8,15 @@ On a shared workstation do not run `just build|fetch-kernel|push` or containers 
 
 ## Failure modes
 
-### 1. `fetch-kernel` dies with `OSSL_DECODER_from_bio:unsupported ... Input type: PEM`
-- **Where:** schedule / `workflow_dispatch` / `merge_group` runs (~2 min), kernel-cache job. Not on PRs.
-- **Diagnosis:** the `Retrieve Signing Key` step in `reusable-build.yml` writes an empty `secrets.KERNEL_PRIVKEY`
-  into `certs/private_key.priv`, a **1-byte** file. `build-prep.sh`'s `[[ ! -s ... ]]` test passes, so the test-key
-  fallback never fires. Runs 30318357041, 30412211886, 30503677867.
-- **Action:** set `KERNEL_PRIVKEY` and `AKMOD_PRIVKEY_20230518` (and `SIGNING_SECRET` for cosign) as repo secrets
-  *before* enabling any scheduled build; or patch the guard to reject whitespace-only keys (a fork patch → registry entry).
-  A green PR check does not predict a green nightly.
+### 1. `Retrieve Signing Keys` fails with `Missing signing secret: KSIGN_20240711`
+- **Where:** push / schedule / `workflow_dispatch` runs on `main` (`KSIGN_MODE=production`), kernel-cache or build
+  job. Not on PRs, which use the test keys in `certs/test/`.
+- **Diagnosis:** no `KSIGN_*` secret and no `ksign` environment are configured, and production never falls back to
+  the test keys. (Before the signing-key port in #259, the same gap wrote an empty `KERNEL_PRIVKEY` as a 1-byte key
+  and `fetch-kernel` died with a PEM decode error: runs 30318357041, 30412211886, 30503677867.)
+- **Action:** the owner decides whether this fork signs with its own production key; agents never create keys,
+  secrets or environments. The steps are in `FORK-PATCHES.md`, "Production builds cannot succeed without the
+  signing secrets". A green PR check does not predict a green production run.
 
 ### 2. OpenZFS "maximum supported kernel version is 7.0"
 - **Symptom:** `configure: error: *** Cannot build against kernel version 7.1.x ... maximum supported kernel version is 7.0.`
