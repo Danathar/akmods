@@ -113,11 +113,12 @@ setup() {
 }
 
 # covers: T7
-@test "T7: OpenZFS signing keys are fetched by full fingerprint, not short ID" {
-    run grep -cE -- '--recv-keys [0-9A-F]{40}\b' "${REPO_ROOT}/build_files/zfs/build-kmod-zfs.sh"
+@test "T7: OpenZFS signing keys are imported from the pinned repo file, never fetched from a keyserver" {
+    [ -f "${REPO_ROOT}/build_files/zfs/openzfs-release-keys.asc" ]
+    run grep -cF -- 'gpg --batch --import /tmp/openzfs-release-keys.asc' "${REPO_ROOT}/build_files/zfs/build-kmod-zfs.sh"
     [ "${status}" -eq 0 ]
-    [ "${output}" -eq 3 ]
-    run grep -E -- '--recv(-keys)?[[:space:]]+(0x)?[0-9A-Fa-f]{8}([^0-9A-Fa-f]|$)' "${REPO_ROOT}/build_files/zfs/build-kmod-zfs.sh"
+    [ "${output}" -eq 1 ]
+    run grep -E -- '--recv(-keys)?' "${REPO_ROOT}/build_files/zfs/build-kmod-zfs.sh"
     [ "${status}" -eq 1 ]
 }
 

@@ -365,7 +365,7 @@ const GOOD_PATCHES = {
     'images.yaml': 'base: &b\n  org: danathar\n',
     Justfile: `akmods_name := env('AKMODS_IMAGE_NAME', shell(yq + ' ".images.$1[\\"$2\\"].$3.name" images.yaml'))\n`,
     'build_files/prep/build-prep.sh': 'RPMS_TO_INSTALL+=(\n    git\n)\n',
-    'build_files/zfs/build-kmod-zfs.sh': 'gpg --keyserver hkps://k --recv-keys 4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027 # T\n',
+    'build_files/zfs/build-kmod-zfs.sh': 'gpg --batch --import /tmp/openzfs-release-keys.asc\n',
 };
 
 test('fork-patches: all patches present passes', () => {

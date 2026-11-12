@@ -224,22 +224,23 @@ with upstream's script in the #198 sync; the T5 test, the T5 check in `tests/uni
 - **Remove when:** upstream installs `git` for all flavors, stops using `git apply` (the patch block
   is guarded to ZFS 2.4.3 and disappears once 2.4.4 ships), or starts building ZFS on `main` itself.
 
-### T7 — OpenZFS signing keys fetched by full fingerprint
+### T7 — OpenZFS signing keys pinned in the repository
 
-- **Files:** `build_files/zfs/build-kmod-zfs.sh` (the three `gpg --recv-keys` lines)
-- **What:** the three OpenZFS release signing keys are fetched by their full 40-digit fingerprints
-  over `hkps://`, instead of by 8-digit short key IDs (`D4598027`, `C77B9667`, `C6AF658B`) over
-  plain `hkp`.
-- **Why:** anyone can upload a key to `keyserver.ubuntu.com`, and a key with the same 8-digit short ID
-  takes minutes to generate. `gpg --recv` by short ID imports every key that matches, and the
-  `gpg --verify` that follows accepts a signature from any key in the keyring. So someone able to
-  replace the ZFS release files could also sign them with a look-alike key, and the signature check
-  that is meant to catch exactly that would pass. With a full fingerprint, gpg drops any returned key
-  that does not match it. The fingerprints are the ones `keyserver.ubuntu.com` returned for the
-  three short IDs on 2026-10-25 (one key each).
-- **Merge note:** upstream edits to this block (a new or rotated key) must be re-expressed as full
-  fingerprints. `policies/fork-patches.json` fails `policy-check` if a short ID comes back.
-- **Remove when:** upstream fetches the keys by full fingerprint (or ships them in the repository).
+- **Files:** `build_files/zfs/build-kmod-zfs.sh`, `build_files/zfs/openzfs-release-keys.asc`, `README.md`
+  (section "OpenZFS release signing keys")
+- **What:** the three OpenZFS release signing keys ship in the repository as an armored keyring. The
+  build imports them into a throwaway `GNUPGHOME` with `no-auto-key-retrieve` and `disable-dirmngr`, and
+  fails unless the primary-key fingerprints are exactly the pinned list of three full 40-digit
+  fingerprints. Signature and checksum verification are unchanged.
+- **Why:** fetching keys from `keyserver.ubuntu.com` at build time made every build depend on that
+  server being up, and trusted whatever it returned. (This fork earlier fetched by full fingerprint
+  instead of 8-digit short IDs, because a look-alike key with the same short ID is cheap to generate;
+  pinning supersedes that and removes the network dependency.)
+- **Merge note:** upstream edits to the key list must be re-expressed in the keyring and the fingerprint
+  list. `policies/fork-patches.json` fails `policy-check` if the pinned import is removed or a short ID
+  fetch comes back.
+- **Remove when:** never needed to be removed if upstream ships the same pinned keys; drop this entry
+  once upstream matches.
 
 
 ### T8 — `RPMFUSION_MIRROR` rewrite finds the repo files in either directory
