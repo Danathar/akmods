@@ -54,6 +54,8 @@
   prose: unchecked: table of agent doc paths
 ## PR conventions
   prose: narrative: branch, commit and pull request conventions
+## Owner's standing decisions
+  prose: narrative: a standing ruling on which owner questions agents decide themselves
 
 [CHANGELOG.md]
 ## 1.0.0 (2024-04-27)
