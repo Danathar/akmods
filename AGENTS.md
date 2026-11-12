@@ -105,10 +105,11 @@ a command to run it is already breaking the rules in this file.
 - **All `Build * akmods` workflows and `Cleanup Old Images` are `disabled_manually`** in GitHub settings (not
   visible in any file). This fork's own workflows build and publish nothing; the publish path is exercised
   from `zfs-aurora-complex`.
-- **No repo secrets are configured** (`KERNEL_PRIVKEY`, `AKMOD_PRIVKEY_20230518`, `SIGNING_SECRET`). On
-  `pull_request` the build falls back to the test key and passes; on `schedule`/`workflow_dispatch` an empty
-  secret yields a 1-byte key file and `fetch-kernel` dies with a PEM decode error. A green PR check does not
-  predict a green nightly. Details: the "Scheduled builds" section of `FORK-PATCHES.md`.
+- **No signing secrets and no `ksign` environment are configured** (`KSIGN_20240711`, `SIGNING_SECRET`).
+  Pull requests, local builds and the consumer builds sign with the committed test keys in `certs/test/`
+  (`KSIGN_MODE=test`). A push, scheduled or manual run on `main` selects `KSIGN_MODE=production` and stops
+  at `Missing signing secret: KSIGN_20240711`. A green PR check does not predict a green production run.
+  Details: the "Production builds" section of `FORK-PATCHES.md`.
 - `just generate-workflows` deletes and regenerates `.github/workflows/build*.yml` from `workflow-templates/`
   and `images.yaml`. Never hand-edit generated `build-akmods-*.yml`; edit templates/`images.yaml` instead.
 - T1: never flip `zfs.main.linux_experimental` to `true` just to turn a red ZFS build green.

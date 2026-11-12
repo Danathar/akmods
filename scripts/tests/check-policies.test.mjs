@@ -66,11 +66,17 @@ test('globToRegExp: * stays in a directory, ** crosses', () => {
 test('signing-keys: 0-byte placeholders and the test keys pass', () => {
     const { root, files } = tree({
         'certs/private_key.priv': '',
-        'certs/private_key.priv.test': `${PEM}\nabc\n`,
+        'certs/test/KSIGN_TEST_A.key': `${PEM}\nabc\n`,
         'certs/public_key.der': 'x',
-        '.github/workflows/reusable-build.yml': 'k: ${{ secrets.KERNEL_PRIVKEY }}\n',
+        '.github/workflows/reusable-build.yml': 'k: ${{ secrets.KSIGN_20240711 }}\n',
     });
     assert.deepEqual(checkSigningKeys(root, policy('signing-keys'), files), []);
+});
+
+test('signing-keys: a production key written next to its certificate fails', () => {
+    const { root, files } = tree({ 'certs/production/KSIGN_20240711.key': `${PEM}\nabc\n` });
+    const v = checkSigningKeys(root, policy('signing-keys'), files);
+    assert.match(v.join('\n'), /private key material/);
 });
 
 test('signing-keys: non-empty certs/*.priv fails', () => {
@@ -89,6 +95,14 @@ test('signing-keys: private key block in another file fails', () => {
 test('signing-keys: signing secret outside the two reusable workflows fails', () => {
     const { root, files } = tree({
         '.github/workflows/other.yml': 'x: ${{ secrets.SIGNING_SECRET }}\n',
+    });
+    const v = checkSigningKeys(root, policy('signing-keys'), files);
+    assert.match(v.join('\n'), /outside/);
+});
+
+test('signing-keys: a KSIGN_ production key secret outside the two reusable workflows fails', () => {
+    const { root, files } = tree({
+        '.github/workflows/other.yml': 'x: ${{ secrets.KSIGN_20240711 }}\n',
     });
     const v = checkSigningKeys(root, policy('signing-keys'), files);
     assert.match(v.join('\n'), /outside/);

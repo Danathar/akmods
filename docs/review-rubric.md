@@ -15,8 +15,8 @@ risk tiers are in [risk-tiers.md](risk-tiers.md), and agent rules in [AGENTS.md]
    and honours `AKMODS_IMAGE_NAME`. If it regresses, `zfs-aurora-complex` publishes under the wrong image name.
 4. **T1 intact.** `zfs.main.linux_experimental` is `false`. Setting it `true` to turn a red build green is a rejection
    (it hides the kernel-ceiling signal).
-5. **Signing paths untouched.** No change to `certs/`, `cosign.pub`, `KERNEL_PRIVKEY` / `AKMOD_PRIVKEY_*` /
-   `SIGNING_SECRET` handling, or the `[[ ! -s ... ]]` guards in `build-prep.sh`, unless that *is* the PR's stated purpose
+5. **Signing paths untouched.** No change to `certs/`, `cosign.pub`, `KSIGN_*` / `SIGNING_SECRET` handling,
+   `KSIGN_MODE` selection, or the key checks in `build_files/prep/check-signing-key.sh`, unless that *is* the PR's stated purpose
    and a human owner approved. No secret values in logs, diffs, or PR text.
 6. **Generated workflows regenerated, not hand-edited.** `build-akmods-*.yml` come from `workflow-templates/`;
    they carry a "GENERATED WORKFLOW, DO NOT EDIT BY HAND" header. Change `workflow-templates/*.yaml.in` and run `just generate-workflows`; never patch one output.

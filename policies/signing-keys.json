@@ -1,15 +1,15 @@
 {
-    "$comment": "Private signing keys never live in the repository. The certs/*.priv files are committed as 0-byte placeholders that the build workflows overwrite from repository secrets at build time (reusable-build.yml, reusable-cache-kernel.yml); build-prep.sh falls back to the *.priv.test keys when they are empty. See docs/security/SECURITY-AI.md.",
+    "$comment": "Private signing keys never live in the repository. Production keys are KSIGN_<id> secrets that the two reusable build workflows (reusable-build.yml, reusable-cache-kernel.yml) write to certs/production/<id>.key with `just write-signing-keys` and delete with `just remove-signing-keys`; certs/production/*.key is gitignored. The only committed private keys are the public test keys in certs/test/*.key. certs/private_key.priv is a leftover 0-byte placeholder that nothing reads (FORK-PATCHES.md T11). See docs/security/SECURITY-AI.md.",
     "emptyPlaceholderGlobs": [
         "certs/*.priv"
     ],
     "privateKeyPattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----",
     "privateKeyAllowedGlobs": [
-        "certs/*.priv.test"
+        "certs/test/*.key"
     ],
     "privateKeyScanMaxBytes": 1048576,
     "signingSecrets": {
-        "pattern": "secrets\\.(?:KERNEL_PRIVKEY|AKMOD_PRIVKEY_20230518|SIGNING_SECRET)\\b",
+        "pattern": "secrets\\.(?:KSIGN_[A-Z0-9_]+|KERNEL_PRIVKEY|AKMOD_PRIVKEY_20230518|SIGNING_SECRET)\\b",
         "scanGlobs": [
             ".github/**/*.yml",
             ".github/**/*.yaml",

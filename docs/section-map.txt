@@ -58,6 +58,10 @@
   prose: narrative: a standing ruling on which owner questions agents decide themselves
 
 [CHANGELOG.md]
+## Unreleased
+  prose: narrative: upstream's release notes, kept as upstream wrote them
+### Breaking changes
+  prose: narrative: upstream's release notes, kept as upstream wrote them
 ## 1.0.0 (2024-04-27)
   prose: narrative: upstream's release notes, kept as upstream wrote them
 ### Features
@@ -140,7 +144,9 @@
   joined: .coverage-thresholds.json
 ### T9 — `just login` passes the registry token on stdin
   joined: .coverage-thresholds.json
-### T10 — Non-signing half of upstream ublue-os/akmods#632, ported ahead of the signing half
+### T10 — *(retired 2026-11-12)* Non-signing half of upstream ublue-os/akmods#632, ported ahead of the signing half
+  prose: narrative: retired patch, kept as history
+### T11 — Empty `certs/private_key.priv` placeholder kept
   joined: .coverage-thresholds.json
 ### ZFS build tools on the `main` flavor
   joined: tests/unit/zfs_flavor_deps.bats
@@ -150,7 +156,7 @@
   prose: narrative: introduces the two subsections below
 ### This fork's own workflows build and publish nothing
   prose: unchecked: disabled build workflows, a repository setting no file holds
-### Scheduled builds cannot succeed without the signing secrets
+### Production builds cannot succeed without the signing secrets
   prose: unchecked: what the build workflows do with missing signing secrets
 
 [README.md]
@@ -196,6 +202,8 @@
   prose: unchecked: images.yaml layout and the yq commands that read it
 ### Regenerating GitHub Workflows
   prose: unchecked: which templates generate the build workflows
+### Kernel and module signing keys
+  prose: unchecked: the certs/ key layout, KSIGN_MODE and the ksign environment (upstream text); tests/unit/signing_keys.bats runs the key checks but does not read this section
 ### Skipping Unchanged Builds
   prose: unchecked: the fingerprint label and its inputs
 ### Adding Kernels and KMODs
@@ -206,8 +214,8 @@
 [docs/ai-ops-runbook.md]
 ## Failure modes
   prose: narrative: introduces the failure modes
-### 1. `fetch-kernel` dies with `OSSL_DECODER_from_bio:unsupported ... Input type: PEM`
-  prose: unchecked: the signing-key step in reusable-build.yml and build-prep.sh's test-key fallback
+### 1. `Retrieve Signing Keys` fails with `Missing signing secret: KSIGN_20240711`
+  prose: unchecked: the Retrieve Signing Keys step in the reusable workflows and write-signing-keys.sh
 ### 2. OpenZFS "maximum supported kernel version is 7.0"
   prose: unchecked: the OpenZFS kernel range and the T1 compatibility gate
 ### 3. ZFS version pin: "ZFS_VERSION must be a full X.Y.Z release" / 404 fetching the ZFS tarball

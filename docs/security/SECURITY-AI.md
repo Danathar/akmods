@@ -9,27 +9,30 @@ live in [`policies/`](../../policies/README.md) and run in CI as
 
 ## 1. Secrets: agents never handle them
 
-Three repository secrets exist in the upstream build design:
+Two kinds of secret exist in the upstream build design:
 
 | Secret | Used for | Consumed only by |
 | --- | --- | --- |
-| `KERNEL_PRIVKEY` | kernel-module signing key (`certs/private_key.priv`) | `reusable-build.yml`, `reusable-cache-kernel.yml` |
-| `AKMOD_PRIVKEY_20230518` | second (dual-sign) key (`certs/private_key_2.priv`) | same two workflows |
+| `KSIGN_<id>` (today `KSIGN_20240711`), in the `ksign` environment | kernel and module signing key, written to `certs/production/<id>.key` by `just write-signing-keys` | `reusable-build.yml`, `reusable-cache-kernel.yml` |
 | `SIGNING_SECRET` | cosign key for image signatures (`COSIGN_PRIVATE_KEY`) | `reusable-build.yml` |
+
+None of them, and no `ksign` environment, is configured in this fork.
 
 Rules:
 
 - An agent MUST NOT read, print, log, copy, request, generate or rotate any of
   them, and MUST NOT add a workflow step, script or `secrets:` mapping that
   references them. `policies/signing-keys.json` fails CI if any other file
-  references `secrets.KERNEL_PRIVKEY`, `AKMOD_PRIVKEY_20230518` or
-  `SIGNING_SECRET`.
-- `certs/private_key.priv` and `certs/private_key_2.priv` are committed as
-  **0-byte placeholders** and MUST stay empty. `build-prep.sh` falls back to
-  the committed `*.priv.test` test keys only when they are empty; the build
-  workflows overwrite the placeholders inside the runner from the secrets and
-  never commit them. Committing a non-empty `*.priv`, or any private-key
-  block outside `certs/*.priv.test`, fails CI. If a key is ever committed,
+  references `secrets.KSIGN_*` or `SIGNING_SECRET`.
+- The only committed private keys are the public test keys in
+  `certs/test/*.key`. `KSIGN_MODE` picks the key set: `test` (the default,
+  used by pull requests, local builds and the consumers) or `production`
+  (push, schedule and manual runs on `main`). Production never falls back to
+  the test keys. `certs/production/*.key` is gitignored, and the workflows
+  delete it with `just remove-signing-keys` even after a failure.
+  `certs/private_key.priv` is a leftover 0-byte placeholder (FORK-PATCHES.md
+  T11) and MUST stay empty. Committing a non-empty `*.priv`, or any
+  private-key block outside `certs/test/*.key`, fails CI. If a key is ever committed,
   treat it as compromised: stop, tell the owner, do not try to scrub history
   yourself.
 - Never put a secret on a command line. A program's arguments are readable
@@ -107,16 +110,15 @@ Load-bearing patches P1 (`org: danathar`), P2 (`AKMODS_IMAGE_NAME` / name from
 
 Checked against the repository, not assumed:
 
-- `certs/private_key.priv` and `certs/private_key_2.priv` are 0 bytes;
-  `certs/private_key.priv.test` / `private_key_2.priv.test` (1704 bytes each)
-  are the committed throwaway test keys that `build-prep.sh` uses when the
-  real key is absent. Images built without the secrets are therefore signed
-  with a publicly known key: do not trust them.
-- `reusable-build.yml` and `reusable-cache-kernel.yml` write the secrets with
-  `echo "${{ secrets.KERNEL_PRIVKEY }}" > certs/private_key.priv`, i.e. the
-  secret is expanded into the shell script text. GitHub masks it in logs, but
-  `env:` plus `"$VAR"` is the safer pattern. These are upstream-owned files,
-  so this is noted rather than patched.
+- `certs/test/KSIGN_TEST_A.key` / `KSIGN_TEST_B.key` (1704 bytes each) are
+  the committed throwaway test keys, listed in `certs/test/signing-keys`.
+  Every build outside production mode, the consumers' builds included, is
+  signed with these publicly known keys: do not trust or enroll them.
+  `certs/private_key.priv` is 0 bytes.
+- `reusable-build.yml` and `reusable-cache-kernel.yml` hand the production
+  key to `just write-signing-keys` through `env:`, so the secret is not
+  expanded into the script text. The writer turns tracing off, writes each key
+  with `umask 077` and checks it against its committed certificate.
 - Upstream workflows (`build-akmods-*.yml`, `reusable-*.yml`) declare
   permissions per job, not at top level; the policy therefore applies the
   top-level rule to fork-local workflows only.

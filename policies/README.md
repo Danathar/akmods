@@ -8,7 +8,7 @@ Locally: `node scripts/check-policies.mjs`; the checker's own tests:
 
 | File | Rule |
 | --- | --- |
-| `signing-keys.json` | `certs/*.priv` are 0-byte placeholders; no private key material anywhere else (except `certs/*.priv.test`); `secrets.KERNEL_PRIVKEY`, `AKMOD_PRIVKEY_20230518`, `SIGNING_SECRET` are referenced only by `reusable-build.yml` and `reusable-cache-kernel.yml` |
+| `signing-keys.json` | `certs/*.priv` are 0-byte placeholders; no private key material anywhere else (except the test keys in `certs/test/*.key`); `secrets.KSIGN_*`, `KERNEL_PRIVKEY`, `AKMOD_PRIVKEY_20230518`, `SIGNING_SECRET` are referenced only by `reusable-build.yml` and `reusable-cache-kernel.yml` |
 | `workflow-permissions.json` | no `pull_request_target`, no `write-all`; fork-local workflows also need top-level read-only `permissions:`, SHA-pinned actions, no event text in `run:` |
 | `repo-target.json` | every `gh` write command names `Danathar/akmods` (upstream is read-only) |
 | `fork-patches.json` | fork patches P1, P2, T6, T7 from `FORK-PATCHES.md` are still present |

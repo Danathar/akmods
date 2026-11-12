@@ -126,7 +126,8 @@ stated condition under which it should be deleted).
   kmod versions, and the Terra mirror served stale metadata for `akmod-openrazer` on `ogc-lts`.
 - **Merge note:** upstream edits to these groups, or a new nvidia target or OGC flavor, conflict here or
   come back silently through a group upstream adds. Drop them again, then run `just generate-workflows`.
-  `tests/unit/fork_patches.bats` (P6) fails if either one comes back.
+  Upstream hunks to `build-akmods-ogc*.yml` have nothing to land on here; skip them (the signing-key
+  port in #259 did). `tests/unit/fork_patches.bats` (P6) fails if either one comes back.
 
 ---
 
@@ -270,30 +271,30 @@ with upstream's script in the #198 sync; the T5 test, the T5 check in `tests/uni
   workflow's `run:` script, and `tests/unit/fork_patches.bats` (T9) checks what `podman` receives.
 - **Remove when:** upstream's `login` recipe reads the token from stdin.
 
-### T10 — Non-signing half of upstream ublue-os/akmods#632, ported ahead of the signing half
+### T10 — *(retired 2026-11-12)* Non-signing half of upstream ublue-os/akmods#632, ported ahead of the signing half
 
-- **Files:** `Justfile` (`fetch-kernel`, `build`, `test` recipes),
-  `build_files/test/check-kernel-cache.sh`, `build_files/test/check-kernel-cache-test.sh`
-- **What:** taken from upstream #632 by hand, without the signing changes (#258):
-  1. `build` and `test` mount the kernel cache with `--volume {{ KCPATH }}:/tmp/kernel_cache:ro,z`
-     (was `:ro`), so rootless local builds on SELinux hosts can read it.
-  2. `fetch-kernel` reuses the cache only when `check-kernel-cache.sh` passes: `cache.json` names the
-     same kernel and full kernel release (which carries the Fedora version and architecture), both
-     `<name>-<release>.rpm` and `<name>-core-<release>.rpm` exist, and every cached RPM has that
-     release. Otherwise it deletes the cached RPMs and fetches again. Before, one file name existing was
-     enough.
-  3. The two scripts are byte-identical to upstream's.
-- **Why it is a delta:** upstream's `fetch-kernel` also keys the cache on the signing mode and a key
-  digest (a `signing-digest` stamp), and its workflows key `actions/cache` on
-  `fc<version>-<flavor>-<release>-<mode>-<digest>`. Those depend on upstream's new signing scripts and
-  the workflow changes, which come with the signing half (#259). Until then this fork's `fetch-kernel`
-  differs from upstream's, and the upstream `.gitignore`, `CHANGELOG.md` and `fetch-kernel.sh` hunks of
-  #632 are not here (they are all signing).
-- **Merge note:** when #259 or an upstream sync brings the rest of #632, take upstream's `fetch-kernel`
-  recipe whole; it already contains the check this patch adds. `tests/unit/fork_patches.bats` (T10)
-  checks the checker and the three recipes.
-- **Remove when:** #259 lands (or an upstream sync brings #632 in full) and `fetch-kernel` matches
-  upstream's. The `:ro,z` lines and the two scripts are then upstream's own and need no entry.
+The kernel cache check (`build_files/test/check-kernel-cache.sh` and its test) and the `:ro,z` kernel cache
+mount in `build` and `test` were ported first (#258), without upstream's signing-mode/digest stamp in
+`fetch-kernel`, the `actions/cache` keys in the reusable workflows, and the signing hunks of
+`.gitignore`, `CHANGELOG.md` and `fetch-kernel.sh`. #259 ported the rest, so `fetch-kernel` now matches
+upstream's. The three cache tests moved from `fork_patches.bats` to `tests/unit/signing_keys.bats`,
+which also runs upstream's signing-helper tests.
+
+### T11 — Empty `certs/private_key.priv` placeholder kept
+
+- **Files:** `certs/private_key.priv`
+- **What:** upstream's signing-key rework (ported in #259) deletes this 0-byte file together with the
+  other old key files. The fork keeps it.
+- **Why:** the owner's ruling on #255 named the `certs/` files the port may delete
+  (`private_key_2.priv`, `public_key_2.der` and the `.test` keys), and this one is not on that list.
+  Nothing reads it any more. The workflows write production keys to `certs/production/<id>.key`, and
+  the build scripts take keys only from `certs/production/` or `certs/test/`.
+  `policies/signing-keys.json` still requires it to stay 0 bytes.
+- **Merge note:** the fork has not changed the file, so an upstream merge that includes the deletion
+  removes it without a conflict. Drop this entry and its test then.
+- **Remove when:** the owner approves deleting it, or an upstream merge deletes it.
+  `tests/unit/fork_patches.bats` (T11) checks that it is empty and that no build script, workflow or
+  `Justfile` recipe names it.
 
 ### ZFS build tools on the `main` flavor
 
@@ -340,30 +341,29 @@ removable dead weight during a merge.
 then switched back off. This state lives in GitHub repository settings, not in any file here, so `git
 log` will never show it changing — which is exactly why it is written down.
 
-### Scheduled builds cannot succeed without the signing secrets
+### Production builds cannot succeed without the signing secrets
 
-This one costs an hour to rediscover. No repository secrets are configured, and the failure mode differs
-by trigger:
+No repository secrets and no `ksign` environment are configured, and the owner's ruling on #255 says
+none are to be created for now. Since #259 the build workflows pick the key set from the trigger:
 
-- On **`pull_request`**, the `Retrieve Signing Key` step in `reusable-build.yml` is skipped. The
-  committed `certs/private_key.priv` stays 0 bytes, `build-prep.sh`'s `[[ ! -s ... ]]` test fires, and
-  the build falls back to the test key and succeeds with `WARNING: Using test signing key.`
-- On **`schedule`** / `workflow_dispatch` / `merge_group`, that step *runs* and writes an empty
-  `secrets.KERNEL_PRIVKEY` into `certs/private_key.priv` — producing a **1-byte** file. `-s` now passes,
-  so the test-key fallback never triggers, and the run dies in `fetch-kernel` with:
+- **`pull_request`**, and any run on a branch other than `main`: `KSIGN_MODE=test`. The build signs with
+  the committed test keys in `certs/test/` and publishes nothing. Local `just` runs and the
+  `zfs-aurora-complex` / `zfs-kinoite-complex` builds use the same default.
+- **`push`, `schedule` or `workflow_dispatch` on `main`**: `KSIGN_MODE=production`. The job runs in the
+  `ksign` environment, and `Retrieve Signing Keys` (`just write-signing-keys`) stops the run with
+  `Missing signing secret: KSIGN_20240711`. Production never falls back to the test keys.
 
-  ```
-  OSSL_DECODER_from_bio:unsupported:...:No supported data to decode. Input type: PEM
-  error: Recipe `fetch-kernel` failed with exit code 1
-  ```
+The older failure, where an empty `KERNEL_PRIVKEY` was written as a 1-byte key and `fetch-kernel` died
+with a PEM decode error (runs 30318357041, 30412211886, 30503677867), can no longer happen. A green PR
+check still does **not** predict a green production run.
 
-  This kills the *kernel cache* job, before any akmod is built. Observed on runs 30318357041,
-  30412211886, 30503677867 (~2 min each).
-
-So a green PR check does **not** predict a green nightly. Enabling any scheduled build requires setting
-`KERNEL_PRIVKEY` and `AKMOD_PRIVKEY_20230518` first, or patching the `-s` guard to also reject
-whitespace-only key files. `SIGNING_SECRET` is absent too, so pushed images would not be cosign-signed
-either.
+Before enabling any `Build *` workflow, set up signing as the README's "Kernel and module signing keys"
+section describes, with a key this fork owns: `just generate-signing-key` writes a certificate whose
+subject names Universal Blue, so change that first. GitHub creates an environment the first time a job
+names it, so create `ksign` yourself, limited to `main`, before that first run; otherwise it is created
+with no branch restriction. The build workflows now publish on push to `main` instead of from the merge
+queue, so drop the merge-queue rule from branch protection too. `SIGNING_SECRET` is absent as well, so
+pushed images would not be cosign-signed.
 
 Note the 2026-07-05 disabling had a *different* cause — a transient `kojipkgs` truncation
 (`curl (18) end of response with ... bytes missing`), a flake rather than a config fault.
