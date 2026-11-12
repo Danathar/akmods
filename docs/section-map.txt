@@ -132,7 +132,7 @@
   prose: narrative: retired patch, kept as history
 ### T6 — `git` in the build environment
   joined: .coverage-thresholds.json
-### T7 — OpenZFS signing keys fetched by full fingerprint
+### T7 — OpenZFS signing keys pinned in the repository
   joined: .coverage-thresholds.json
 ### T8 — `RPMFUSION_MIRROR` rewrite finds the repo files in either directory
   joined: .coverage-thresholds.json
@@ -170,6 +170,8 @@
   prose: narrative: introduces the notes below
 ### NVIDIA Hardware Support
   prose: narrative: upstream's NVIDIA driver notes
+### OpenZFS release signing keys
+  prose: unchecked: the pinned key file, the fingerprint list in build-kmod-zfs.sh and how to refresh them
 ### Pinning the coreos-stable kernel
   prose: unchecked: the Justfile coreos_stable_kernel_pin value and how get-kernel-version applies it
 ## Usage
