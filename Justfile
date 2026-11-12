@@ -559,8 +559,15 @@ build-needed:
 fetch-kernel: (cache-kernel-version)
     #!/usr/bin/env bash
     {{ if path_exists(version_json) != 'true' { error('Need to run just cache-kernel-version first for dry-run') } else { '' } }}
-    {{ if path_exists( KCPATH / shell("jq -r '.kernel_name + \"-\" + .kernel_release + \".rpm\"' < $1", version_json)) == 'true' { 'exit 0' } else { '' } }}
     set ${CI:+-x} -euo pipefail
+
+    # Reuse the cache only when cache.json and every cached RPM match this exact
+    # kernel release, which carries the Fedora version and the architecture.
+    if bash build_files/test/check-kernel-cache.sh "{{ KCPATH }}" "{{ shell('jq -r .kernel_name < $1', version_json) }}" "{{ shell('jq -r .kernel_release < $1', version_json) }}"; then
+        exit 0
+    fi
+    # Old RPMs must not survive a kernel-release change.
+    rm -f "{{ KCPATH }}"/*.rpm
 
     # Pull Build Image
     {{ podman }} pull --retry 3 "{{ builder }}" >&2
@@ -654,7 +661,7 @@ build: (cache-kernel-version) (fetch-kernel)
         "--tag" "{{ akmods_name + ':' + kernel_flavor + '-' + version + '-' + shell("jq -r '.kernel_release' < $1", version_json) }}"
     )
 
-    {{ podman }} build -f Containerfile.in --volume {{ KCPATH }}:/tmp/kernel_cache:ro "${CPP_FLAGS[@]}" "${LABELS[@]}" "${TAGS[@]}" --target RPMS {{ justfile_dir () }}
+    {{ podman }} build -f Containerfile.in --volume {{ KCPATH }}:/tmp/kernel_cache:ro,z "${CPP_FLAGS[@]}" "${LABELS[@]}" "${TAGS[@]}" --target RPMS {{ justfile_dir () }}
 
 # Test Cached Akmod RPMs
 [group('Build')]
@@ -696,7 +703,7 @@ test: (cache-kernel-version) (fetch-kernel)
         echo "WARNING: no valid fingerprint snapshot, building unpinned (run 'just fingerprint' first)" >&2
     fi
 
-    {{ podman }} build -f Containerfile.in --volume {{ KCPATH }}:/tmp/kernel_cache:ro "${CPP_FLAGS[@]}" --target test --tag akmods-test:latest {{ justfile_dir () }}
+    {{ podman }} build -f Containerfile.in --volume {{ KCPATH }}:/tmp/kernel_cache:ro,z "${CPP_FLAGS[@]}" --target test --tag akmods-test:latest {{ justfile_dir () }}
     if ! podman run --rm akmods-test:latest; then
         echo "Signatures Failed" >&2
         exit 1

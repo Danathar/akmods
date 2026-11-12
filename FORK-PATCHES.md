@@ -270,6 +270,31 @@ with upstream's script in the #198 sync; the T5 test, the T5 check in `tests/uni
   workflow's `run:` script, and `tests/unit/fork_patches.bats` (T9) checks what `podman` receives.
 - **Remove when:** upstream's `login` recipe reads the token from stdin.
 
+### T10 — Non-signing half of upstream ublue-os/akmods#632, ported ahead of the signing half
+
+- **Files:** `Justfile` (`fetch-kernel`, `build`, `test` recipes),
+  `build_files/test/check-kernel-cache.sh`, `build_files/test/check-kernel-cache-test.sh`
+- **What:** taken from upstream #632 by hand, without the signing changes (#258):
+  1. `build` and `test` mount the kernel cache with `--volume {{ KCPATH }}:/tmp/kernel_cache:ro,z`
+     (was `:ro`), so rootless local builds on SELinux hosts can read it.
+  2. `fetch-kernel` reuses the cache only when `check-kernel-cache.sh` passes: `cache.json` names the
+     same kernel and full kernel release (which carries the Fedora version and architecture), both
+     `<name>-<release>.rpm` and `<name>-core-<release>.rpm` exist, and every cached RPM has that
+     release. Otherwise it deletes the cached RPMs and fetches again. Before, one file name existing was
+     enough.
+  3. The two scripts are byte-identical to upstream's.
+- **Why it is a delta:** upstream's `fetch-kernel` also keys the cache on the signing mode and a key
+  digest (a `signing-digest` stamp), and its workflows key `actions/cache` on
+  `fc<version>-<flavor>-<release>-<mode>-<digest>`. Those depend on upstream's new signing scripts and
+  the workflow changes, which come with the signing half (#259). Until then this fork's `fetch-kernel`
+  differs from upstream's, and the upstream `.gitignore`, `CHANGELOG.md` and `fetch-kernel.sh` hunks of
+  #632 are not here (they are all signing).
+- **Merge note:** when #259 or an upstream sync brings the rest of #632, take upstream's `fetch-kernel`
+  recipe whole; it already contains the check this patch adds. `tests/unit/fork_patches.bats` (T10)
+  checks the checker and the three recipes.
+- **Remove when:** #259 lands (or an upstream sync brings #632 in full) and `fetch-kernel` matches
+  upstream's. The `:ro,z` lines and the two scripts are then upstream's own and need no entry.
+
 ### ZFS build tools on the `main` flavor
 
 Not a patch: the shared root cause of T4 and T6 (and the retired T5), written down so the next instance is caught at the

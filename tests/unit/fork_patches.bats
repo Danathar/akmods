@@ -201,3 +201,37 @@ STUB
     run cat "${log}.stdin"
     [ "${output}" = "not-a-real-token" ]
 }
+
+# Prints the body of one Justfile recipe: the lines after `<name>:` up to the
+# next line that starts in column 0 (a comment, attribute or the next recipe).
+recipe_body() {
+    awk -v r="$1" '$0 ~ "^" r ":" { p = 1; next } p && /^[^[:space:]]/ { exit } p' "${REPO_ROOT}/Justfile"
+}
+
+# covers: T10
+@test "T10: the kernel cache checker accepts a matching cache and refuses a wrong or mixed one" {
+    run bash "${REPO_ROOT}/build_files/test/check-kernel-cache-test.sh"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *'Kernel cache validation passed'* ]]
+}
+
+# covers: T10
+@test "T10: fetch-kernel reuses cached RPMs only after check-kernel-cache.sh passes" {
+    run recipe_body fetch-kernel
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *'bash build_files/test/check-kernel-cache.sh "{{ KCPATH }}"'* ]]
+    [[ "${output}" == *'rm -f "{{ KCPATH }}"/*.rpm'* ]]
+    # The old check skipped the fetch when one file name existed.
+    [[ "${output}" != *"'exit 0' } else"* ]]
+}
+
+# covers: T10
+@test "T10: build and test mount the kernel cache with the SELinux relabel option" {
+    local r
+    for r in build test; do
+        run recipe_body "${r}"
+        [ "${status}" -eq 0 ]
+        [[ "${output}" == *'--volume {{ KCPATH }}:/tmp/kernel_cache:ro,z "'* ]]
+        [[ "${output}" != *'/tmp/kernel_cache:ro "'* ]]
+    done
+}
