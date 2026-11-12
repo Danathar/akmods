@@ -140,6 +140,8 @@
   joined: .coverage-thresholds.json
 ### T9 — `just login` passes the registry token on stdin
   joined: .coverage-thresholds.json
+### T10 — Non-signing half of upstream ublue-os/akmods#632, ported ahead of the signing half
+  joined: .coverage-thresholds.json
 ### ZFS build tools on the `main` flavor
   joined: tests/unit/zfs_flavor_deps.bats
 ## Related
