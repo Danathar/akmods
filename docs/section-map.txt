@@ -124,6 +124,8 @@
   prose: unchecked: lists the fork-local tooling files; exempt from the Coverage gate
 ### P6 — No nvidia targets and no OGC kernel flavors
   joined: .coverage-thresholds.json
+### P7 — Renovate waits three days before taking a new GitHub Actions release
+  joined: .coverage-thresholds.json
 ## Temporary
   prose: narrative: introduces the temporary patches
 ### T1 — `zfs.main` block pinning the kernel-compatibility gate

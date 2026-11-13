@@ -129,6 +129,21 @@ stated condition under which it should be deleted).
   Upstream hunks to `build-akmods-ogc*.yml` have nothing to land on here; skip them (the signing-key
   port in #259 did). `tests/unit/fork_patches.bats` (P6) fails if either one comes back.
 
+### P7 — Renovate waits three days before taking a new GitHub Actions release
+
+- **Files:** `renovate.json` (one `packageRules` entry), `tests/unit/fork_patches.bats` (P7).
+- **What:** a package rule with `matchManagers: ["github-actions"]` and `minimumReleaseAge: "3 days"`.
+  Renovate holds an action update PR until the release is three days old. Other managers, including the
+  `images.yaml` custom manager for OpenZFS, are not affected.
+- **Why:** patch and minor action updates with green CI merge without the owner (AGENTS.md "Owner's
+  standing decisions"), so CI is the only thing between a new action release and `main`. Several fork
+  workflows give actions a write token or secrets, and the build jobs that write the module signing key
+  run only on `main`, so a bump PR's CI never exercises them. A compromised action release is usually
+  found and pulled within days; the wait covers that window. The same rule the owner merged in
+  `zfs-kinoite-complex`, `zfs-aurora-complex` and `aurora-zfs-simple` (#273).
+- **Merge note:** upstream edits to `renovate.json` (new rules, presets) are taken as they are; keep this
+  rule. If upstream adds its own `minimumReleaseAge`, keep the longer of the two for github-actions.
+
 ---
 
 ## Temporary
