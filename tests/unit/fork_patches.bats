@@ -212,3 +212,14 @@ STUB
     [ "${status}" -eq 1 ]
     [ -z "${output}" ]
 }
+
+# covers: P7
+@test "P7: Renovate waits three days before a new GitHub Actions release, for github-actions only" {
+    run jq -r '[.packageRules[] | select(.minimumReleaseAge != null)
+        | "\(.matchManagers | tojson)=\(.minimumReleaseAge)"] | join(";")' "${REPO_ROOT}/renovate.json"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = '["github-actions"]=3 days' ]
+    # A top-level wait would also hold back the images.yaml (OpenZFS) manager.
+    run jq -e 'has("minimumReleaseAge") | not' "${REPO_ROOT}/renovate.json"
+    [ "${status}" -eq 0 ]
+}

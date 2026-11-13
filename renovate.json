@@ -23,6 +23,13 @@
         "openzfs/zfs"
       ],
       "allowedVersions": "<2.5"
+    },
+    {
+      "description": "Wait three days before taking a new GitHub Actions release. Non-major action updates merge without the owner once CI is green, and a compromised action usually ships as a fresh release that is found and pulled within days; this is the window in which it can be caught before it reaches a workflow that holds a write token or the module signing key. Scoped to github-actions so the images.yaml manager and digest updates are not held back. Fork delta P7 in FORK-PATCHES.md.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "minimumReleaseAge": "3 days"
     }
   ]
 }
