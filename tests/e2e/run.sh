@@ -43,7 +43,7 @@ fi
 
 # --- setup -------------------------------------------------------------------
 e2e_stage "Install tools"
-dnf install -y -q jq git curl tar gzip gawk findutils diffutils bats
+dnf install -y -q jq git curl tar gzip gawk findutils diffutils bats openssl
 "${REPO_ROOT}/tests/install-tools.sh" /usr/local/bin
 just --version
 yq --version
@@ -73,11 +73,16 @@ just_in_work() { (cd "${WORK}" && just --evaluate "$1"); }
 
 # --- 1. unit suite on Fedora ---------------------------------------------------
 e2e_stage "bats unit suite on Fedora"
-if (cd "${REPO_ROOT}" && bats --tap tests/unit); then
+if (cd "${REPO_ROOT}" && bats --tap tests/unit) | tee "${SCRATCH}/unit.tap"; then
     e2e_ok "bats unit suite passes on Fedora"
 else
     e2e_fail "bats unit suite failed on Fedora"
 fi
+# A bats test skips when a tool it needs is missing, and a skip still prints
+# `ok`. Here that tool is missing from the dnf line above, and the test proved
+# nothing on Fedora (#275: all seven signing tests skipped without openssl).
+skipped="$(grep -c ' # skip' "${SCRATCH}/unit.tap" || true)"
+e2e_eq "no bats test skipped on Fedora" "0" "${skipped}"
 e2e_endstage
 
 # --- 2. every images.yaml combination resolves ----------------------------------
