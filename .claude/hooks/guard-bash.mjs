@@ -114,9 +114,11 @@
 //       and `bats tests/unit` name files relative to it: the pre-approved forms
 //       would run another directory's code. Run them from the checkout root.
 //   Signing material
-//   K1  Writes (redirect, tee, cp, mv, install, ln, truncate, dd of=,
-//       openssl -out/-keyout) to anything under certs/ other than *.test, or to any
-//       .priv/.key/.pem/.p12/.pfx file.
+//   K1  Writes (redirect, tee, cp, mv, install, ln, truncate, rsync, dd of=,
+//       openssl -out/-keyout (also -out=FILE), sed -i, curl -o/--output-dir,
+//       wget -O/-P, tar -x -C) to anything under certs/ other than *.test, or
+//       to any .priv/.key/.pem/.p12/.pfx file. After a cd/pushd into certs/
+//       anywhere in the command line, a relative target counts as under certs/.
 //
 // Parsing notes: redirections (`>log`, `2>&1`, `&>f`, `<file`) end the word
 // and are not arguments, but `>` targets are remembered for K1. A shell with
@@ -1135,9 +1137,11 @@ function checkNpx(args, moved = false) {
  * would put real signing material on disk, or recreate the 1-byte-key failure
  * documented in FORK-PATCHES.md.
  */
-function checkWriteTarget(path) {
-    const p = String(path);
+function checkWriteTarget(path, cwdInCerts = false) {
+    let p = String(path);
     if (p === '' || p.startsWith('/dev/')) return null;
+    // `cd certs/production && cp /tmp/x KSIGN.der` writes under certs/ too.
+    if (cwdInCerts && !p.startsWith('/') && !p.startsWith('~')) p = `certs/${p}`;
     const name = basename(p);
     const inCerts = /(^|\/)certs(\/.*)?$/.test(p) && !name.endsWith('.test');
     const keyLike = /\.(priv|key|pem|p12|pfx)$/i.test(name);
@@ -1149,25 +1153,68 @@ function checkWriteTarget(path) {
     );
 }
 
-/** Commands whose operands are write destinations (tee, cp, mv, install, ln, truncate, dd of=, openssl -out). */
-function checkWriteCommand(cmd, args) {
+/** The operands of `args` that are not options or the values of `valueFlags`. */
+function operands(args, valueFlags) {
+    const out = [];
+    for (let i = 0; i < args.length; i++) {
+        if (valueFlags.includes(args[i])) i++;
+        else if (!args[i].startsWith('-')) out.push(args[i]);
+    }
+    return out;
+}
+
+/**
+ * The values given to any of `flags`: `-o VALUE` and `-o=VALUE`; with `short`,
+ * a one-letter flag also inside a bundle (`-sSLo VALUE`) or with its value
+ * attached (`-oVALUE`), as curl, wget and tar read them.
+ */
+function optionValues(args, flags, short = false) {
+    const out = [];
+    args.forEach((a, n) => {
+        for (const f of flags) {
+            if (a === f) out.push(args[n + 1] ?? '');
+            else if (a.startsWith(`${f}=`)) out.push(a.slice(f.length + 1));
+            else if (short && f.length === 2) {
+                const m = new RegExp(`^-[a-zA-Z#]*${f[1]}(.*)$`).exec(a);
+                if (m) out.push(m[1] === '' ? (args[n + 1] ?? '') : m[1]);
+            }
+        }
+    });
+    return out;
+}
+
+/**
+ * Commands whose operands are write destinations (tee, cp, mv, install, ln,
+ * truncate, rsync, dd of=, openssl -out, sed -i, curl -o, wget -O, tar -x -C).
+ */
+function checkWriteCommand(cmd, args, cwdInCerts = false) {
     const plain = args.filter((a) => !a.startsWith('-'));
     let targets = [];
     if (cmd === 'tee' || cmd === 'truncate') targets = plain;
-    else if (['cp', 'mv', 'install', 'ln'].includes(cmd)) {
+    else if (cmd === 'rsync') targets = plain.slice(-1);
+    else if (cmd === 'sed') {
+        // -i edits each file operand in place; without -e/-f the first operand is the script.
+        if (args.some((a) => /^-[a-zA-Z]*i/.test(a) || a === '--in-place' || a.startsWith('--in-place='))) {
+            const files = operands(args, ['-e', '-f', '-l', '--expression', '--file', '--line-length']);
+            const scripted = args.some((a) => /^-[a-zA-Z]*[ef]/.test(a) || /^--(expression|file)(=|$)/.test(a));
+            targets = scripted ? files : files.slice(1);
+        }
+    } else if (cmd === 'curl') targets = optionValues(args, ['-o', '--output', '--output-dir'], true);
+    else if (cmd === 'wget') targets = optionValues(args, ['-O', '--output-document', '-P', '--directory-prefix'], true);
+    else if (cmd === 'tar') {
+        const extract =
+            /^[a-zA-Z]*x/.test(args[0] ?? '') || args.some((a) => /^-[a-zA-Z]*x/.test(a) || a === '--extract' || a === '--get');
+        if (extract) targets = optionValues(args, ['-C', '--directory'], true);
+    } else if (['cp', 'mv', 'install', 'ln'].includes(cmd)) {
         targets = plain.slice(-1);
         args.forEach((a, n) => {
             if (a === '-t' || a === '--target-directory') targets.push(args[n + 1] ?? '');
             else if (a.startsWith('--target-directory=')) targets.push(a.slice(19));
         });
     } else if (cmd === 'dd') targets = args.filter((a) => a.startsWith('of=')).map((a) => a.slice(3));
-    else if (cmd === 'openssl') {
-        args.forEach((a, n) => {
-            if (a === '-out' || a === '-keyout') targets.push(args[n + 1] ?? '');
-        });
-    }
+    else if (cmd === 'openssl') targets = optionValues(args, ['-out', '-keyout']);
     for (const t of targets) {
-        const r = checkWriteTarget(t);
+        const r = checkWriteTarget(t, cwdInCerts);
         if (r) return r;
     }
     return null;
@@ -1276,7 +1323,7 @@ function checkUnlistedProgram(w, inlineEnv, state) {
 function checkSegment(words, state) {
     spend();
     for (const out of words.outs ?? []) {
-        const r = checkWriteTarget(out);
+        const r = checkWriteTarget(out, state.cwdInCerts);
         if (r) return r;
     }
     const { pipedFrom, stdinFrom, hereString, heredocBody } = words;
@@ -1431,7 +1478,7 @@ function checkSegment(words, state) {
     if (cmd === 'source' || cmd === '.') {
         return args.some(isHostScript) ? blockHostScript(`Sourcing ${args.find(isHostScript)}`) : null;
     }
-    const writeBlock = checkWriteCommand(cmd, args);
+    const writeBlock = checkWriteCommand(cmd, args, state.cwdInCerts);
     if (writeBlock) return writeBlock;
     if (cmd === 'find') return checkFindExec(args, state, moved);
     if (SHELLS.has(cmd)) {
@@ -1542,6 +1589,8 @@ export function checkCommand(command, state = {}) {
     // closed rather than follow subshell nesting and execution order.
     const segments = tokenize(command);
     if (segments.some(changesDirectory)) state.cwdMoved = true;
+    // K1: a directory change into certs/ makes every relative write target in the line one under certs/.
+    if (segments.some((s) => changesDirectory(s) && s.some((x) => /(^|\/)certs(\/|$)/.test(x)))) state.cwdInCerts = true;
     for (const sub of extractSubstitutions(command)) {
         const r = checkCommand(sub, state);
         if (r) return r;
