@@ -173,14 +173,14 @@ const allowed = [
     'skopeo inspect docker://ghcr.io/ublue-os/akmods:main-44',
     'skopeo list-tags docker://ghcr.io/ublue-os/akmods',
     // --- writes next to certs/ that are fine ---
-    'cat certs/public_key.der.test',
+    'cat certs/production/KSIGN_20240711.der',
     'ls -l certs',
     'cp /tmp/x certs/private_key.priv.test',
     'echo hi > build/log.txt',
     'echo hi 2>&1 >/dev/null',
     'tee build/out.txt',
     'cp cosign.pub /tmp/cosign.pub',
-    'openssl x509 -in certs/public_key.der.test -inform DER -noout -text',
+    'openssl x509 -in certs/production/KSIGN_20240711.der -inform DER -noout -text',
     // a backslash-quoted heredoc delimiter keeps the body literal
     'cat <<\\EOF\n$(sudo ls)\nEOF',
     // and so does a `$'...'` one, decoded the way bash decodes it (#188)
@@ -632,7 +632,12 @@ const blocked = [
     ['skopeo delete docker://a', 'skopeo delete'],
     // --- K1: signing material ---
     ['echo x > certs/private_key.priv', 'signing material'],
-    ['printf "" >> certs/private_key_2.priv', 'signing material'],
+    ['cp /tmp/x certs/production/KSIGN_20240711.der', 'signing material'],
+    ['echo KSIGN_X > certs/production/signing-keys', 'signing material'],
+    ['printf X > certs/production/compat-key', 'signing material'],
+    ['mv /tmp/k certs/test/KSIGN_TEST_A.der', 'signing material'],
+    ['echo x > certs/test/signing-keys', 'signing material'],
+    ['printf "" >> certs/production/KSIGN_20240711.key', 'signing material'],
     ['echo "$KERNEL_PRIVKEY" > certs/private_key.priv', 'signing material'],
     ['cp /tmp/key certs/private_key.priv', 'signing material'],
     ['mv /tmp/k certs/public_key.der', 'signing material'],

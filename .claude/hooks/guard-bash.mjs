@@ -115,7 +115,7 @@
 //       would run another directory's code. Run them from the checkout root.
 //   Signing material
 //   K1  Writes (redirect, tee, cp, mv, install, ln, truncate, dd of=,
-//       openssl -out/-keyout) to certs/ files other than *.test, or to any
+//       openssl -out/-keyout) to anything under certs/ other than *.test, or to any
 //       .priv/.key/.pem/.p12/.pfx file.
 //
 // Parsing notes: redirections (`>log`, `2>&1`, `&>f`, `<file`) end the word
@@ -1131,7 +1131,7 @@ function checkNpx(args, moved = false) {
 /**
  * certs/ holds the repository's signing keys (committed empty or as public
  * `.test` keys; the real ones are repository secrets written by CI). Writing
- * anything but a `.test` file there, or any private-key-looking file anywhere,
+ * anything under certs/ (any depth) but a `.test` file, or any private-key-looking file anywhere,
  * would put real signing material on disk, or recreate the 1-byte-key failure
  * documented in FORK-PATCHES.md.
  */
@@ -1139,7 +1139,7 @@ function checkWriteTarget(path) {
     const p = String(path);
     if (p === '' || p.startsWith('/dev/')) return null;
     const name = basename(p);
-    const inCerts = /(^|\/)certs(\/[^/]+)?\/?$/.test(p) && !name.endsWith('.test');
+    const inCerts = /(^|\/)certs(\/.*)?$/.test(p) && !name.endsWith('.test');
     const keyLike = /\.(priv|key|pem|p12|pfx)$/i.test(name);
     if (!inCerts && !keyLike) return null;
     return block(
