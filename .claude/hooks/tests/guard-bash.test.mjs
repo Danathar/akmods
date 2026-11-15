@@ -11,11 +11,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { globMatches, tokenize } from '../shell-reader.mjs';
+import { startState } from '../guard-bash.mjs';
 
 const HOOK = fileURLToPath(new URL('../guard-bash.mjs', import.meta.url));
+const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 
-function run(command, toolName = 'Bash') {
-    const input = JSON.stringify({ tool_name: toolName, tool_input: { command } });
+/** `cwd`, when given, is sent as the shell's directory, the way Claude Code reports it between calls. */
+function run(command, toolName = 'Bash', cwd = undefined) {
+    const payload = { tool_name: toolName, tool_input: { command } };
+    if (cwd !== undefined) payload.cwd = cwd;
+    const input = JSON.stringify(payload);
     return spawnSync(process.execPath, [HOOK], { input, encoding: 'utf8' });
 }
 
@@ -1022,6 +1027,45 @@ for (const [command, fragment] of blocked) {
         assert.match(r.stderr, /Danathar\/akmods/);
     });
 }
+
+// K1 with the session's directory: an earlier call's `cd certs/production` is
+// remembered by Claude Code and reported as `cwd` on the next call (#287).
+const fromCwd = [
+    // [cwd under the checkout, command, refused?]
+    ['', 'cd certs/production', false],
+    ['certs/production', 'cp /tmp/x KSIGN_20240711.der', true],
+    ['certs/production', 'echo K > signing-keys', true],
+    ['certs', 'cp /tmp/x production/KSIGN_20240711.der', true],
+    ['certs/test', 'sed -i s/A/B/ signing-keys', true],
+    ['certs/production', 'cat signing-keys', false],
+    ['certs/production', 'cp signing-keys /tmp/signing-keys.bak', false],
+    ['certs', 'cp /tmp/x private_key.priv.test', false],
+    ['build_files', 'cp /tmp/x x', false],
+];
+for (const [dir, command, refused] of fromCwd) {
+    test(`from cwd ${dir || '.'}: ${refused ? 'blocks' : 'allows'} ${command}`, () => {
+        const r = run(command, 'Bash', join(ROOT, dir));
+        if (refused) {
+            assert.equal(r.status, 2, `expected block, got ${r.status}`);
+            assert.match(r.stderr, /signing material/);
+        } else {
+            assert.equal(r.status, 0, `expected allow, got ${r.status}: ${r.stderr}`);
+        }
+    });
+}
+
+test('startState reads cwd against the checkout root only (#287)', () => {
+    assert.deepEqual(startState(undefined), {});
+    assert.deepEqual(startState(''), {});
+    assert.deepEqual(startState(join(ROOT, 'certs', 'production')), { cwdInCerts: true });
+    assert.deepEqual(startState('certs'), { cwdInCerts: true });
+    assert.deepEqual(startState(join(ROOT, 'build_files')), {});
+    assert.deepEqual(startState(ROOT), {});
+    // a checkout that itself sits under some outer certs/ directory is not affected
+    assert.deepEqual(startState('/srv/certs/akmods', '/srv/certs/akmods'), {});
+    assert.deepEqual(startState('/srv/certs', '/srv/certs/akmods'), {});
+    assert.deepEqual(startState('/srv/certs/akmods/certs', '/srv/certs/akmods'), { cwdInCerts: true });
+});
 
 test('ignores non-Bash tools', () => {
     assert.equal(run('gh pr create', 'Edit').status, 0);

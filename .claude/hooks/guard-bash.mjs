@@ -21,7 +21,8 @@
 // in GitHub Actions. See FORK-PATCHES.md for the fork's operational state.
 //
 // Protocol (https://docs.anthropic.com/en/docs/claude-code/hooks): the hook
-// receives JSON on stdin ({ tool_name, tool_input: { command } }). Exit 0 lets
+// receives JSON on stdin ({ tool_name, tool_input: { command }, cwd }), where
+// cwd is the shell's directory, which Claude Code keeps between Bash calls. Exit 0 lets
 // the call proceed; exit 2 blocks it and feeds stderr back to the model.
 //
 // Rule list (fail closed when unsure):
@@ -118,7 +119,8 @@
 //       openssl -out/-keyout (also -out=FILE), sed -i, curl -o/--output-dir,
 //       wget -O/-P, tar -x -C) to anything under certs/ other than *.test, or
 //       to any .priv/.key/.pem/.p12/.pfx file. After a cd/pushd into certs/
-//       anywhere in the command line, a relative target counts as under certs/.
+//       anywhere in the command line, or when the session's cwd is already
+//       under the checkout's certs/, a relative target counts as under certs/.
 //
 // Parsing notes: redirections (`>log`, `2>&1`, `&>f`, `<file`) end the word
 // and are not arguments, but `>` targets are remembered for K1. A shell with
@@ -155,7 +157,7 @@
 // holds this repository's rules (the list above), its messages and the hook's
 // entry point, and imports the reader.
 
-import { basename, resolve } from 'node:path';
+import { basename, relative, resolve } from 'node:path';
 import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 // Reading the command line as the shell would is shared with the other
@@ -1606,6 +1608,21 @@ export function checkCommand(command, state = {}) {
 // Entry point
 // ---------------------------------------------------------------------------
 
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
+
+/**
+ * K1: Claude Code keeps the shell's directory between Bash calls and reports it
+ * as `cwd`. A session already inside certs/ writes there with a relative target
+ * and no cd in the command line. The cwd is measured from the checkout root, so
+ * a checkout that itself sits under some outer certs/ directory is unaffected.
+ */
+export function startState(cwd, root = ROOT) {
+    if (typeof cwd !== 'string' || cwd === '') return {};
+    const rel = relative(root, resolve(root, cwd));
+    if (rel === '..' || rel.startsWith('../')) return {};
+    return /(^|\/)certs(\/|$)/.test(rel) ? { cwdInCerts: true } : {};
+}
+
 export function main(check = checkCommand, budgetMs = BUDGET_MS) {
     // Claude Code blocks only on exit 2; any other failure (an uncaught
     // exception exits 1) lets the command run. So nothing may escape this function.
@@ -1622,7 +1639,7 @@ export function main(check = checkCommand, budgetMs = BUDGET_MS) {
         if (typeof command !== 'string' || !command.trim()) process.exit(0);
 
         startBudget(budgetMs);
-        const result = check(command);
+        const result = check(command, startState(payload?.cwd));
         if (result) {
             process.stderr.write(`guard-bash: ${result.reason}\n`);
             process.exit(2);
