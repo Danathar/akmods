@@ -117,10 +117,12 @@
 //   Signing material
 //   K1  Writes (redirect, tee, cp, mv, install, ln, truncate, rsync, dd of=,
 //       openssl -out/-keyout (also -out=FILE), sed -i, curl -o/--output-dir,
-//       wget -O/-P, tar -x -C) to anything under certs/ other than *.test, or
-//       to any .priv/.key/.pem/.p12/.pfx file. After a cd/pushd into certs/
-//       anywhere in the command line, or when the session's cwd is already
-//       under the checkout's certs/, a relative target counts as under certs/.
+//       wget -O/-P, tar -x -C, unzip -d) to anything under certs/ other than
+//       *.test, or to any .priv/.key/.pem/.p12/.pfx file. After a cd/pushd into
+//       certs/ anywhere in the command line, or when the session's cwd is already
+//       under the checkout's certs/, a relative target counts as under certs/,
+//       and so does the current directory that curl -O, wget, tar -x and unzip
+//       write into when no destination is given.
 //
 // Parsing notes: redirections (`>log`, `2>&1`, `&>f`, `<file`) end the word
 // and are not arguments, but `>` targets are remembered for K1. A shell with
@@ -1187,7 +1189,9 @@ function optionValues(args, flags, short = false) {
 
 /**
  * Commands whose operands are write destinations (tee, cp, mv, install, ln,
- * truncate, rsync, dd of=, openssl -out, sed -i, curl -o, wget -O, tar -x -C).
+ * truncate, rsync, dd of=, openssl -out, sed -i, curl -o, wget -O, tar -x -C,
+ * unzip -d). curl -O, wget, tar -x and unzip with no destination write into
+ * the current directory, so `.` is their target.
  */
 function checkWriteCommand(cmd, args, cwdInCerts = false) {
     const plain = args.filter((a) => !a.startsWith('-'));
@@ -1201,12 +1205,34 @@ function checkWriteCommand(cmd, args, cwdInCerts = false) {
             const scripted = args.some((a) => /^-[a-zA-Z]*[ef]/.test(a) || /^--(expression|file)(=|$)/.test(a));
             targets = scripted ? files : files.slice(1);
         }
-    } else if (cmd === 'curl') targets = optionValues(args, ['-o', '--output', '--output-dir'], true);
-    else if (cmd === 'wget') targets = optionValues(args, ['-O', '--output-document', '-P', '--directory-prefix'], true);
-    else if (cmd === 'tar') {
+    } else if (cmd === 'curl') {
+        targets = optionValues(args, ['-o', '--output', '--output-dir'], true);
+        // -O names the file after the URL and saves it in the current directory, unless --output-dir moves it.
+        const remoteName = args.some((a) => /^-[a-zA-Z#]*O/.test(a) || /^--remote-name(-all)?$/.test(a));
+        if (remoteName && optionValues(args, ['--output-dir']).length === 0) targets.push('.');
+        // `-o -` prints to stdout and writes no file.
+        targets = targets.filter((t) => t !== '-');
+    } else if (cmd === 'wget') {
+        targets = optionValues(args, ['-O', '--output-document', '-P', '--directory-prefix'], true);
+        // With no -O or -P, wget saves into the current directory.
+        if (targets.length === 0 && !args.includes('--spider')) targets.push('.');
+        // `-O-` prints to stdout and writes no file.
+        targets = targets.filter((t) => t !== '-');
+    } else if (cmd === 'tar') {
         const extract =
             /^[a-zA-Z]*x/.test(args[0] ?? '') || args.some((a) => /^-[a-zA-Z]*x/.test(a) || a === '--extract' || a === '--get');
-        if (extract) targets = optionValues(args, ['-C', '--directory'], true);
+        if (extract) {
+            targets = optionValues(args, ['-C', '--directory'], true);
+            // With no -C, tar extracts into the current directory.
+            if (targets.length === 0) targets.push('.');
+        }
+    } else if (cmd === 'unzip') {
+        // -l, -t, -p, -v, -z and -Z only list, test or print; otherwise unzip extracts into -d or the current directory.
+        // The class stops at `d`, whose value may follow in the same word (`-dDIR`).
+        if (!args.some((a) => /^-[a-ce-zA-Z]*[ltpvzZ]/.test(a))) {
+            targets = optionValues(args, ['-d'], true);
+            if (targets.length === 0) targets.push('.');
+        }
     } else if (['cp', 'mv', 'install', 'ln'].includes(cmd)) {
         targets = plain.slice(-1);
         args.forEach((a, n) => {
