@@ -213,6 +213,23 @@ const allowed = [
     'cd certs && wget -qO- https://example.com/x',
     'cd certs && curl -fsSL -o - https://example.com/x',
     'cd certs && wget --spider https://example.com/x',
+    // option values and look-alike words that are not write targets (merged survivors of #286, #288, #290)
+    "sed -i -e 's/certs/x/' README.md",
+    "sed -i --expression 's/certs/x/' README.md",
+    'sed -i -f certs/edit.sed README.md',
+    'sed -i --file certs/edit.sed README.md',
+    "sed -i -l 80 's/certs/x/' README.md",
+    "sed -i --line-length 80 's/certs/x/' README.md",
+    "sed -n 's/x-i/y/p' certs/production/signing-keys",
+    "sed -i 's/x-e/certs/' README.md",
+    "sed -i 's/--file=/certs/' README.md",
+    'rsync -a /tmp/a certs/production/signing-keys /tmp/backup/',
+    'cd certs && curl -fsSL https://example.com/a-O',
+    'cd certs && curl -fsSL https://example.com/a--remote-name',
+    'tar --exclude=x -cf /tmp/certs.tar -C certs .',
+    'cd certs && unzip -ql /tmp/k.zip',
+    'cd certs && unzip /tmp/k.zip -d /tmp/out',
+    'ls -out certs',
     // a backslash-quoted heredoc delimiter keeps the body literal
     'cat <<\\EOF\n$(sudo ls)\nEOF',
     // and so does a `$'...'` one, decoded the way bash decodes it (#188)
@@ -707,6 +724,21 @@ const blocked = [
     ['openssl genrsa -out /tmp/x.key 4096', 'signing material'],
     ['bash -c "echo x > certs/private_key.priv"', 'signing material'],
     ['truncate -s 0 certs/private_key.priv', 'signing material'],
+    // each spelling of the K1 writers' destination options (merged survivors of #286, #290)
+    ['sed -ni s/A/B/p certs/production/signing-keys', 'signing material'],
+    ['sed --in-place=.bak s/A/B/ certs/production/signing-keys', 'signing material'],
+    ['sed -i -nes/A/B/ certs/production/signing-keys', 'signing material'],
+    ['sed -i --expression s/A/B/ certs/production/signing-keys', 'signing material'],
+    ['curl --output certs/production/KSIGN_20240711.der https://example.com/k', 'signing material'],
+    ['wget --directory-prefix certs/test https://example.com/k.der', 'signing material'],
+    ['tar -xf /tmp/k.tar -Ccerts/production', 'signing material'],
+    ['tar zxf /tmp/k.tgz -C certs/production', 'signing material'],
+    ['tar -zxf /tmp/k.tgz -C certs/production', 'signing material'],
+    ['tar --extract -f /tmp/k.tar -C certs/production', 'signing material'],
+    ['tar --get -f /tmp/k.tar -C certs/production', 'signing material'],
+    ['unzip /tmp/keys-t.zip -d certs/production', 'signing material'],
+    ['ln -s /tmp/k certs/production/KSIGN_20240711.der', 'signing material'],
+    ['openssl req -new -nodes -keyout certs/private_key.priv -out /tmp/x.csr', 'signing material'],
     // a backslash-quoted heredoc delimiter ends the body like a quoted one
     ['cat <<\\EOF\nx\nEOF\nsudo ls', 'privilege escalation'],
     ['cat <<E\\OF\nx\nEOF\nsudo ls', 'privilege escalation'],
@@ -1096,6 +1128,9 @@ test('startState reads cwd against the checkout root only (#287)', () => {
     assert.deepEqual(startState('/srv/certs/akmods', '/srv/certs/akmods'), {});
     assert.deepEqual(startState('/srv/certs', '/srv/certs/akmods'), {});
     assert.deepEqual(startState('/srv/certs/akmods/certs', '/srv/certs/akmods'), { cwdInCerts: true });
+    // a certs/ directory outside the checkout is not the checkout's certs/
+    assert.deepEqual(startState('/tmp/certs', '/srv/akmods'), {});
+    assert.deepEqual(startState('/tmp/certs/production', '/srv/akmods'), {});
 });
 
 test('ignores non-Bash tools', () => {
