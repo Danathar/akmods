@@ -98,6 +98,41 @@
             "original": "entries[++i].text.trim()",
             "replacement": "entries[++i].text",
             "reason": "Equivalent for findings: the continuation line keeps its indentation, which only adds spaces between the joined halves; trailing spaces are already matched by the backslash test."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "cwd === ''",
+            "replacement": "false",
+            "reason": "Equivalent: an empty cwd resolves to the checkout root, whose relative path is '', which is not under certs/, so startState still returns {}."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "rel === '..'",
+            "replacement": "false",
+            "reason": "Equivalent: a relative path of exactly '..' never matches the certs/ test that follows, so startState returns {} either way. The startsWith('../') half, which does matter, is pinned by the /tmp/certs rows of the startState test."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "StringLiteral",
+            "original": "'..'",
+            "replacement": "\"\"",
+            "reason": "Equivalent: rel === '' (the checkout root) and rel === '..' both fail the certs/ test that follows, so startState returns {} either way."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "OptionalChaining",
+            "original": "payload?.cwd",
+            "replacement": "payload.cwd",
+            "reason": "Equivalent: main() exits 0 before this line unless payload.tool_input.command is a string, so payload is always an object here."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "Regex",
+            "original": "/^--remote-name(-all)?$/",
+            "replacement": "/^--remote-name(-all)?/",
+            "reason": "Harmless over-refusal: curl has no other option that starts with --remote-name, so dropping the end anchor can only refuse more."
         }
     ]
 }
