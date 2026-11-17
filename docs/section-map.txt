@@ -150,6 +150,8 @@
   prose: narrative: retired patch, kept as history
 ### T11 — Empty `certs/private_key.priv` placeholder kept
   joined: .coverage-thresholds.json
+### T12 — `nct6687d` and `zenergy` built in the `common` group, ported ahead of upstream #637
+  joined: .coverage-thresholds.json
 ### ZFS build tools on the `main` flavor
   joined: tests/unit/zfs_flavor_deps.bats
 ## Related

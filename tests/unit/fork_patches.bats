@@ -213,6 +213,28 @@ STUB
     [ -z "${output}" ]
 }
 
+# covers: T12
+@test "T12: nct6687d and zenergy build in the common group, not extra" {
+    local k
+    for k in nct6687d zenergy; do
+        [ -f "${REPO_ROOT}/build_files/common/build-kmod-${k}.sh" ]
+        [ ! -e "${REPO_ROOT}/build_files/extra/build-kmod-${k}.sh" ]
+        run grep -F "/var/cache/rpms/common" "${REPO_ROOT}/build_files/common/build-kmod-${k}.sh"
+        [ "${status}" -eq 0 ]
+        run grep -F "/var/cache/rpms/extra" "${REPO_ROOT}/build_files/common/build-kmod-${k}.sh"
+        [ "${status}" -eq 1 ]
+        # Run bare in the common step: no "|| echo SKIPPED" fallback.
+        run grep -xF "/tmp/build-kmod-${k}.sh" "${REPO_ROOT}/Containerfile.in"
+        [ "${status}" -eq 0 ]
+        run grep -F "build-kmod-${k}.sh ||" "${REPO_ROOT}/Containerfile.in"
+        [ "${status}" -eq 1 ]
+        run grep -F "| common | [${k}]" "${REPO_ROOT}/README.md"
+        [ "${status}" -eq 0 ]
+        run grep -F "| extra | [${k}]" "${REPO_ROOT}/README.md"
+        [ "${status}" -eq 1 ]
+    done
+}
+
 # covers: P7
 @test "P7: Renovate waits three days before a new GitHub Actions release, for github-actions only" {
     run jq -r '[.packageRules[] | select(.minimumReleaseAge != null)

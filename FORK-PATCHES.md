@@ -311,6 +311,19 @@ which also runs upstream's signing-helper tests.
   `tests/unit/fork_patches.bats` (T11) checks that it is empty and that no build script, workflow or
   `Justfile` recipe names it.
 
+### T12 — `nct6687d` and `zenergy` built in the `common` group, ported ahead of upstream #637
+
+- **Files:** `Containerfile.in`, `README.md`, `build_files/common/build-kmod-nct6687d.sh`,
+  `build_files/common/build-kmod-zenergy.sh` (moved from `build_files/extra/`)
+- **What:** both kmods move from the `extra` group to `common`: the scripts move, write their RPMs to
+  `/var/cache/rpms/common`, and run in the `common` build step (without the `|| echo "SKIPPED"` fallback).
+  The README table rows move with them.
+- **Why:** the fork ports upstream's change by hand so that its `common` image carries these drivers
+  before the next upstream sync.
+- **Merge note:** upstream's merge of ublue-os/akmods#637 makes the same edits, so the merge should apply
+  cleanly or conflict only on context lines. Keep upstream's version.
+- **Remove when:** upstream merges ublue-os/akmods#637 and the fork syncs it. Delete this entry then.
+
 ### ZFS build tools on the `main` flavor
 
 Not a patch: the shared root cause of T4 and T6 (and the retired T5), written down so the next instance is caught at the
