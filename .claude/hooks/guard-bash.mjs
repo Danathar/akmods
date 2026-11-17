@@ -123,6 +123,16 @@
 //       under the checkout's certs/, a relative target counts as under certs/,
 //       and so does the current directory that curl -O, wget, tar -x and unzip
 //       write into when no destination is given.
+//       Any other command that names a path under certs/ (other than *.test)
+//       is refused too, unless it only reads it: cat, less (no -o/-O/--log-file),
+//       head, tail, ls, stat, file, wc, grep/rg, find without -delete/-exec/
+//       -ok/-fprint/-fls, sha*sum, md5sum, diff, cmp, echo, printf, test/[/[[,
+//       openssl with certs/ only after -in and no -out/-keyout, and git
+//       log/show/diff/status/blame/ls-files. The words read are each operand,
+//       each --opt=value value and each value attached to a short option, so
+//       `git checkout evil -- certs/production/KSIGN.der`, `patch certs/x`,
+//       `bsdtar -xf a -C certs/production` and `rm -r certs` are refused
+//       without being listed (#294).
 //
 // Parsing notes: redirections (`>log`, `2>&1`, `&>f`, `<file`) end the word
 // and are not arguments, but `>` targets are remembered for K1. A shell with
@@ -1248,6 +1258,92 @@ function checkWriteCommand(cmd, args, cwdInCerts = false) {
     return null;
 }
 
+// Programs that only read the files they name (or only print or test their
+// words), so they may name certs/; see checkCertsOperands().
+const CERTS_READERS = new Set([
+    'cat', 'head', 'tail', 'ls', 'stat', 'file', 'wc', 'grep', 'egrep', 'fgrep', 'rg',
+    'diff', 'cmp', 'md5sum', 'echo', 'printf', 'test', '[', '[[',
+]);
+// find actions that delete, write a file or run a program.
+const FIND_WRITES = new Set(['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprint', '-fprint0', '-fprintf', '-fls']);
+// git subcommands that only read.
+const GIT_READS = new Set(['log', 'show', 'diff', 'status', 'blame', 'ls-files']);
+
+/** Whether `word` is a path under certs/ (any depth) other than a `.test` file. URLs are not paths. */
+function namesCerts(word, cwdInCerts) {
+    let p = String(word);
+    if (p === '' || p.startsWith('/dev/') || /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(p)) return false;
+    if (cwdInCerts && !p.startsWith('/') && !p.startsWith('~')) p = `certs/${p}`;
+    return /(^|\/)certs(\/.*)?$/.test(p) && !basename(p).endsWith('.test');
+}
+
+/**
+ * The indexes of the words in `args` that name a path under certs/: each word
+ * that is not an option, the value of each `--opt=value` (and `-opt=value`),
+ * and a value attached to a short option (`-Ccerts/production`). A relative
+ * word or `=` value counts as under certs/ when the cwd is; an attached short
+ * value only when it spells certs/ out, since `-ql` is not a file.
+ */
+function certsOperands(args, cwdInCerts) {
+    const hits = [];
+    args.forEach((a, n) => {
+        let hit;
+        if (!a.startsWith('-')) hit = namesCerts(a, cwdInCerts);
+        else {
+            const eq = a.indexOf('=');
+            hit = eq !== -1 && namesCerts(a.slice(eq + 1), cwdInCerts);
+            for (let k = 2; !hit && !a.startsWith('--') && k < a.length; k++) hit = namesCerts(a.slice(k), false);
+        }
+        if (hit) hits.push(n);
+    });
+    return hits;
+}
+
+/** The git subcommand in `args`, past git's global options. */
+function gitSubcommand(args) {
+    for (let i = 0; i < args.length; i++) {
+        if (['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'].includes(args[i])) i++;
+        else if (!args[i].startsWith('-')) return args[i];
+    }
+    return undefined;
+}
+
+/** Whether `cmd` only reads the certs/ paths at `hits` in `args`. */
+function readsCertsOnly(cmd, args, hits) {
+    if (CERTS_READERS.has(cmd) || /^sha\d*sum$/.test(cmd)) return true;
+    // less -o/-O/--log-file/--LOG-FILE copies what it shows into a file.
+    if (cmd === 'less') return !args.some((a) => /^-[a-zA-Z]*[oO]/.test(a) || /^--(log-file|LOG-FILE)(=|$)/.test(a));
+    if (cmd === 'find') return !args.some((a) => FIND_WRITES.has(a));
+    // openssl SUBCOMMAND -in FILE, with no -out or -keyout anywhere.
+    if (cmd === 'openssl') {
+        return (
+            !args.some((a) => /^-(out|keyout)(=|$)/.test(a)) &&
+            hits.every((n) => n === 0 || args[n - 1] === '-in' || args[n].startsWith('-in='))
+        );
+    }
+    if (cmd === 'git') return GIT_READS.has(gitSubcommand(args));
+    return false;
+}
+
+/**
+ * K1 by default: a command that names a path under certs/ is refused unless it
+ * is one of the few that only read it. Listing every program that writes
+ * (git checkout/restore, patch, bsdtar, cpio, ...) can never be complete;
+ * checkWriteCommand() still covers writers that name no certs/ path (curl -O,
+ * wget, tar -x into the current directory, redirects).
+ */
+function checkCertsOperands(cmd, args, cwdInCerts = false) {
+    const hits = certsOperands(args, cwdInCerts);
+    if (hits.length === 0 || readsCertsOnly(cmd, args, hits)) return null;
+    const p = args[hits[0]];
+    return block(
+        `Blocked: \`${cmd}\` names "${p}" under certs/, which holds the signing material. Only read-only commands may ` +
+            'name it (cat, less, head, tail, ls, stat, file, wc, grep, rg, find without -delete/-exec, sha*sum, md5sum, ' +
+            'diff, cmp, openssl with -in and no -out/-keyout, git log/show/diff/status/blame/ls-files). Signing keys ' +
+            'come from repository secrets in CI; change certs/ in a pull request a human reviews.'
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Segment / command analysis
 // ---------------------------------------------------------------------------
@@ -1488,6 +1584,9 @@ function checkSegment(words, state) {
         }
         return null;
     }
+    // K1: before the gh, git and node rules, which return early.
+    const writeBlock = checkWriteCommand(cmd, args, state.cwdInCerts) ?? checkCertsOperands(cmd, args, state.cwdInCerts);
+    if (writeBlock) return writeBlock;
     if (cmd === 'gh') {
         // `GH_REPO+=-x gh ...` appends to the repository gh would otherwise use.
         const appended = inlineEnv['GH_REPO+'];
@@ -1506,8 +1605,6 @@ function checkSegment(words, state) {
     if (cmd === 'source' || cmd === '.') {
         return args.some(isHostScript) ? blockHostScript(`Sourcing ${args.find(isHostScript)}`) : null;
     }
-    const writeBlock = checkWriteCommand(cmd, args, state.cwdInCerts);
-    if (writeBlock) return writeBlock;
     if (cmd === 'find') return checkFindExec(args, state, moved);
     if (SHELLS.has(cmd)) {
         // `bash -n` is pre-approved in .claude/settings.json because -n parses a
