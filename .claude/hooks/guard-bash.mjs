@@ -457,6 +457,15 @@ function checkPrCreate(args) {
 // git (the option, config and environment rules are in shell-reader.mjs)
 // ---------------------------------------------------------------------------
 
+// git's global options that take their value as the next word. Both walks
+// that look for the subcommand (checkGit and gitSubcommand) skip that word, so
+// `git --attr-source X push` is read as `push`, not `X` (#297). Keep one list
+// so an addition reaches both. `--super-prefix` is gone from git 2.42+, but
+// older git still reads it this way.
+const GIT_GLOBAL_OPTIONS_WITH_VALUE = [
+    '-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env', '--attr-source', '--super-prefix',
+];
+
 function checkGit(args, inlineEnv = {}, exported = {}) {
     // Walk global options to find the subcommand, vetting `-c key=value`.
     let i = 0;
@@ -474,7 +483,7 @@ function checkGit(args, inlineEnv = {}, exported = {}) {
         if (a.startsWith('--exec-path=')) {
             return block('Blocked: `git --exec-path=DIR` runs git commands from another directory.');
         }
-        i += ['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'].includes(a) ? 2 : 1;
+        i += GIT_GLOBAL_OPTIONS_WITH_VALUE.includes(a) ? 2 : 1;
     }
     const sub = args[i];
     const rest = args.slice(i + 1);
@@ -1302,7 +1311,7 @@ function certsOperands(args, cwdInCerts) {
 /** The git subcommand in `args`, past git's global options. */
 function gitSubcommand(args) {
     for (let i = 0; i < args.length; i++) {
-        if (['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'].includes(args[i])) i++;
+        if (GIT_GLOBAL_OPTIONS_WITH_VALUE.includes(args[i])) i++;
         else if (!args[i].startsWith('-')) return args[i];
     }
     return undefined;
