@@ -333,6 +333,8 @@ const allowed = [
     'echo "$(case a in a) echo hi;; esac) done"',
     'x=$(case a in (a) echo hi;; b|c) echo no;& d) echo x;;& esac); echo "$x"',
     'echo $(echo case a in a) git push --force origin main',
+    // --attr-source takes the next word, so `log` is the subcommand here (#297)
+    'git --attr-source HEAD log -- certs/production/KSIGN.der',
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -398,6 +400,12 @@ const blocked = [
     ['git push --prune origin main', 'deleting remote refs'],
     ['git push --pru origin main', 'deleting remote refs'],
     ['git -C ../wt push origin --delete old-branch', 'deleting remote refs'],
+    // --attr-source and --super-prefix take the next word as their value (#297)
+    ['git --attr-source HEAD push --force origin main', 'force push'],
+    ['git --super-prefix x/ push --force origin main', 'force push'],
+    ['git --attr-source x push origin :main', 'deletes a remote ref'],
+    ['git --attr-source log checkout HEAD~1 -- certs/production/KSIGN.der', 'signing material'],
+    ['git --attr-source log rm certs/production/KSIGN.der', 'signing material'],
     ['GIT_SSH_COMMAND=x git push origin main', 'GIT_SSH_COMMAND'],
     // --- T2: remote / config rewrites ---
     ['git remote set-url origin https://github.com/ublue-os/akmods.git', 'origin'],
