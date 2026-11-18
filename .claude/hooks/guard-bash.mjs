@@ -133,6 +133,10 @@
 //       `git checkout evil -- certs/production/KSIGN.der`, `patch certs/x`,
 //       `bsdtar -xf a -C certs/production` and `rm -r certs` are refused
 //       without being listed (#294).
+//       Behind xargs the names arrive on stdin, so a command that is not on
+//       that read-only list is refused when its input can name certs/: the
+//       session is under certs/, or a segment piped into it, a here-string or
+//       a heredoc names certs/ (`find certs | xargs rm`, #299).
 //
 // Parsing notes: redirections (`>log`, `2>&1`, `&>f`, `<file`) end the word
 // and are not arguments, but `>` targets are remembered for K1. A shell with
@@ -1353,6 +1357,26 @@ function checkCertsOperands(cmd, args, cwdInCerts = false) {
     );
 }
 
+/**
+ * K1 behind xargs: `find certs | xargs rm` hands the writer its certs/ paths
+ * on stdin at run time, so checkCertsOperands() never sees them. Refuse a
+ * command that is not read-only when its input can name certs/: the session is
+ * already under certs/, a segment piped into it names certs/, or a here-string
+ * or heredoc fed to it does.
+ */
+function checkXargsCerts(cmd, args, words, cwdInCerts = false) {
+    if (readsCertsOnly(cmd, args, [])) return null;
+    const fedText = [words.hereString, words.heredocBody].filter((t) => typeof t === 'string');
+    let feeds = cwdInCerts || fedText.some((t) => t.split(/\s+/).some((x) => namesCerts(x, false)));
+    for (let p = words.pipedFrom; !feeds && p; p = p.pipedFrom) feeds = certsOperands(p, false).length > 0;
+    if (!feeds) return null;
+    return block(
+        `Blocked: \`xargs ${cmd}\` gets file names under certs/, which holds the signing material, at run time. ` +
+            'Only read-only commands may take them (cat, grep, sha*sum, ...). Signing keys come from repository ' +
+            'secrets in CI; change certs/ in a pull request a human reviews.'
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Segment / command analysis
 // ---------------------------------------------------------------------------
@@ -1594,7 +1618,10 @@ function checkSegment(words, state) {
         return null;
     }
     // K1: before the gh, git and node rules, which return early.
-    const writeBlock = checkWriteCommand(cmd, args, state.cwdInCerts) ?? checkCertsOperands(cmd, args, state.cwdInCerts);
+    const writeBlock =
+        checkWriteCommand(cmd, args, state.cwdInCerts) ??
+        checkCertsOperands(cmd, args, state.cwdInCerts) ??
+        (xargsFed ? checkXargsCerts(cmd, args, words, state.cwdInCerts) : null);
     if (writeBlock) return writeBlock;
     if (cmd === 'gh') {
         // `GH_REPO+=-x gh ...` appends to the repository gh would otherwise use.
