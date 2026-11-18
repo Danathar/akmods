@@ -467,6 +467,21 @@ const blocked = [
     ['git ls-remote --exec=x .', 'runs the program'],
     ['git archive --remote=. --exec=x HEAD', 'runs the program'],
     ['git -c protocol.ext.allow=always fetch ext::sh', 'run a program'],
+    // safe.bareRepository=explicit is set in .claude/settings.json; -c and --config-env set the same key
+    // at the same level, and git reads section and key names in any case
+    ['git -c safe.bareRepository=all log -p', 'safe.*'],
+    ['git -c SAFE.bareRepository=all log -p', 'safe.*'],
+    ['git -csafe.bareRepository=all log -p', 'safe.*'],
+    ['git -c safe.bareRepository all log -p', 'safe.*'],
+    ['git --config-env=safe.bareRepository=V log -p', 'safe.*'],
+    ['git --config-env safe.bareRepository=V log -p', 'safe.*'],
+    // naming a repository is what safe.bareRepository=explicit allows, so a bare folder a branch planted
+    // is used when named; --work-tree makes git read tracked paths from another directory
+    ['git --git-dir=evil log -p', 'named repository'],
+    ['git --git-dir evil log -p', 'named repository'],
+    ['git --bare log -p', 'named repository'],
+    ['git --work-tree=.. diff HEAD', 'named repository'],
+    ['git --work-tree .. diff HEAD', 'named repository'],
     // git accepts any unique prefix of a long option, and packs short flags
     ['git fetch --uploa=x ../src', 'runs the program'],
     ['git fetch --upload-pac=x ../src', 'runs the program'],
