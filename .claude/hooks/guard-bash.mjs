@@ -470,14 +470,37 @@ const GIT_GLOBAL_OPTIONS_WITH_VALUE = [
     '-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env', '--attr-source', '--super-prefix',
 ];
 
+// `safe.*` git config keys. The settings env sets safe.bareRepository=explicit
+// so git will not use a bare repository a branch planted in the working tree;
+// `-c safe.bareRepository=all` (or `--config-env` naming a variable that holds
+// `all`) sets the same key at the same level, the later value wins, and the
+// planted repository's config, with its diff textconv program, runs under an
+// allow-listed `git log -p`. git reads section and key names in any case.
+const SAFE_GIT_CONFIG = /^safe\./i;
+// Global options that name the repository or the files git works on. With
+// safe.bareRepository=explicit a bare repository is still used when it is
+// named, so `git --git-dir=evil log -p` loads the config a branch planted in
+// `evil`; `--bare` is `--git-dir=.`, and `--work-tree` makes git read tracked
+// paths from another directory.
+const GIT_NAMED_REPO_OPTION = /^--(?:git-dir|work-tree)(?:=|$)|^--bare$/;
+
 function checkGit(args, inlineEnv = {}, exported = {}) {
     // Walk global options to find the subcommand, vetting `-c key=value`.
     let i = 0;
+    let namedRepoOption = null;
     while (i < args.length && args[i].startsWith('-')) {
         const a = args[i];
         let configKey = null;
         if (a === '-c' || a === '--config-env') configKey = (args[i + 1] ?? '').split('=')[0];
         else if (a.startsWith('--config-env=')) configKey = a.slice(13).split('=')[0];
+        else if (a.startsWith('-c') && !a.startsWith('--')) configKey = a.slice(2).split('=')[0]; // -ckey=value
+        if (GIT_NAMED_REPO_OPTION.test(a)) namedRepoOption ??= a;
+        if (configKey !== null && SAFE_GIT_CONFIG.test(configKey)) {
+            return block(
+                `Blocked: \`git ${a} ${configKey}=...\` changes git's safe.* settings, which keep git out of a bare repository a branch planted. ` +
+                    'Leave safe.bareRepository at the value in .claude/settings.json.'
+            );
+        }
         if (configKey !== null && RISKY_GIT_CONFIG.test(configKey)) {
             return block(`Blocked: \`git ${a} ${configKey}=...\` could redirect pushes or credentials.`);
         }
@@ -525,9 +548,21 @@ function checkGit(args, inlineEnv = {}, exported = {}) {
             );
         }
     }
-    if (sub === 'push') return checkGitPush(rest);
-    if (sub === 'remote') return checkGitRemote(rest);
-    if (sub === 'config') return checkGitConfig(rest);
+    // The subcommand's own rules answer first, so a push through --git-dir
+    // still gets its force-push reason; a named repository is refused after.
+    const verdict =
+        sub === 'push' ? checkGitPush(rest) :
+        sub === 'remote' ? checkGitRemote(rest) :
+        sub === 'config' ? checkGitConfig(rest) :
+        null;
+    if (verdict) return verdict;
+    if (namedRepoOption !== null) {
+        return block(
+            `Blocked: \`git ${namedRepoOption} ...\` points git at a named repository or work tree. ` +
+                'A bare repository a branch planted is used when it is named, and its config can run a program. ' +
+                'Run git from the checkout without --git-dir, --bare or --work-tree.'
+        );
+    }
     return null;
 }
 
