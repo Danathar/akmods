@@ -241,6 +241,16 @@ const allowed = [
     'echo certs/production',
     'curl -fsSL https://example.com/certs/ca.pem',
     'cp /tmp/x certs/test/KSIGN_TEST_B.der.test',
+    // K1 behind xargs: read-only commands may take certs/ names, writers elsewhere are untouched (#299)
+    'find certs -type f | xargs sha256sum',
+    'find certs -type f | xargs grep -l KSIGN',
+    'find certs -print0 | xargs -0 cat',
+    'find certs | xargs',
+    "find build_files -name '*.sh' | xargs chmod +x",
+    "git ls-files '*.sh' | xargs sed -i s/a/b/",
+    "xargs rm <<'EOF'\n/tmp/x\nEOF",
+    "xargs cat <<< certs/production/signing-keys",
+    'ls certs/production | sort -r',
     // a backslash-quoted heredoc delimiter keeps the body literal
     'cat <<\\EOF\n$(sudo ls)\nEOF',
     // and so does a `$'...'` one, decoded the way bash decodes it (#188)
@@ -788,6 +798,21 @@ const blocked = [
     ['sed -i --file certs/edit.sed README.md', 'signing material'],
     ["sed -i -l 80 's/certs/x/' README.md", 'signing material'],
     ["sed -i --line-length 80 's/certs/x/' README.md", 'signing material'],
+    // K1 behind xargs: the certs/ names arrive on stdin at run time (#299)
+    ["find certs -name '*.der' | xargs rm", 'signing material'],
+    ['find certs -print0 | xargs -0 rm -f', 'signing material'],
+    ['grep -rl old certs | xargs sed -i s/old/new/', 'signing material'],
+    ['find certs/production -type f | xargs chmod 644', 'signing material'],
+    ['ls certs/production/* | xargs -n1 shred -u', 'signing material'],
+    ['git ls-files certs | xargs truncate -s0', 'signing material'],
+    ["find . -path '*/certs/*' -name '*.der' | xargs rm", 'signing material'],
+    ['find certs | sort | xargs rm', 'signing material'],
+    ['timeout 5 find certs | xargs rm', 'signing material'],
+    ['find certs | timeout 5 xargs rm', 'signing material'],
+    ['echo certs/production/KSIGN.der | xargs rm', 'signing material'],
+    ['xargs rm <<< certs/production/KSIGN.der', 'signing material'],
+    ["xargs rm <<'EOF'\ncerts/production/KSIGN.der\nEOF", 'signing material'],
+    ['cd certs && ls | xargs rm', 'signing material'],
     ["sed -n 's/x-i/y/p' certs/production/signing-keys", 'signing material'],
     ["sed -i 's/x-e/certs/' README.md", 'signing material'],
     ["sed -i 's/--file=/certs/' README.md", 'signing material'],
@@ -1163,6 +1188,11 @@ const fromCwd = [
     ['certs/production', 'openssl x509 -in KSIGN_20240711.der -noout -text', false],
     ['certs', 'cp /tmp/x private_key.priv.test', false],
     ['build_files', 'cp /tmp/x x', false],
+    ['certs/production', 'ls | xargs rm', true],
+    ['certs/production', 'find . -type f | xargs shred -u', true],
+    ['certs/production', 'ls | xargs cat', false],
+    ['certs/production', 'ls | xargs -n1 sha256sum', false],
+    ['build_files', 'ls | xargs chmod +x', false],
 ];
 for (const [dir, command, refused] of fromCwd) {
     test(`from cwd ${dir || '.'}: ${refused ? 'blocks' : 'allows'} ${command}`, () => {
