@@ -251,6 +251,10 @@ const allowed = [
     "xargs rm <<'EOF'\n/tmp/x\nEOF",
     "xargs cat <<< certs/production/signing-keys",
     'ls certs/production | sort -r',
+    // the xargs refusal reads only what names certs/: a relative here-string word elsewhere stays allowed,
+    // and openssl that only reads (-in, no -out) may still take certs/ names
+    'xargs rm <<< build/tmp.o',
+    "find certs -name '*.der' | xargs -I{} openssl x509 -in {} -noout -text",
     // a backslash-quoted heredoc delimiter keeps the body literal
     'cat <<\\EOF\n$(sudo ls)\nEOF',
     // and so does a `$'...'` one, decoded the way bash decodes it (#188)
@@ -345,6 +349,8 @@ const allowed = [
     'echo $(echo case a in a) git push --force origin main',
     // --attr-source takes the next word, so `log` is the subcommand here (#297)
     'git --attr-source HEAD log -- certs/production/KSIGN.der',
+    // -c takes the next word, so `log` is the subcommand here
+    'git -c color.ui=never log -- certs/production/KSIGN.der',
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -416,6 +422,12 @@ const blocked = [
     ['git --attr-source x push origin :main', 'deletes a remote ref'],
     ['git --attr-source log checkout HEAD~1 -- certs/production/KSIGN.der', 'signing material'],
     ['git --attr-source log rm certs/production/KSIGN.der', 'signing material'],
+    // every other global option that takes the next word, so a dropped list entry fails a test
+    ['git -c user.name=x push --force origin main', 'force push'],
+    ['git --git-dir .git push --force origin main', 'force push'],
+    ['git --work-tree . push --force origin main', 'force push'],
+    ['git --namespace x push --force origin main', 'force push'],
+    ['git --config-env user.name=GIT_AUTHOR_NAME push --force origin main', 'force push'],
     ['GIT_SSH_COMMAND=x git push origin main', 'GIT_SSH_COMMAND'],
     // --- T2: remote / config rewrites ---
     ['git remote set-url origin https://github.com/ublue-os/akmods.git', 'origin'],
@@ -812,6 +824,9 @@ const blocked = [
     ['echo certs/production/KSIGN.der | xargs rm', 'signing material'],
     ['xargs rm <<< certs/production/KSIGN.der', 'signing material'],
     ["xargs rm <<'EOF'\ncerts/production/KSIGN.der\nEOF", 'signing material'],
+    // the xargs refusal says what may take certs/ names and where certs/ changes go
+    ['find certs | xargs rm', 'Only read-only commands may take them'],
+    ['find certs | xargs rm', 'in a pull request a human reviews'],
     ['cd certs && ls | xargs rm', 'signing material'],
     ["sed -n 's/x-i/y/p' certs/production/signing-keys", 'signing material'],
     ["sed -i 's/x-e/certs/' README.md", 'signing material'],

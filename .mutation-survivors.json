@@ -133,6 +133,13 @@
             "original": "/^--remote-name(-all)?$/",
             "replacement": "/^--remote-name(-all)?/",
             "reason": "Harmless over-refusal: curl has no other option that starts with --remote-name, so dropping the end anchor can only refuse more."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "Regex",
+            "original": "/\\s+/",
+            "replacement": "/\\s/",
+            "reason": "Equivalent in checkXargsCerts: splitting the fed text on single whitespace only adds empty words between runs of spaces or newlines, and namesCerts('') is false, so the same words decide whether the input names certs/."
         }
     ]
 }
