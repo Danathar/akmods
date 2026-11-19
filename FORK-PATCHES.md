@@ -324,7 +324,7 @@ which also runs upstream's signing-helper tests.
   cleanly or conflict only on context lines. Keep upstream's version.
 - **Remove when:** upstream merges ublue-os/akmods#637 and the fork syncs it. Delete this entry then.
 
-### T13 — Every workflow job sets `timeout-minutes`
+### T13 - Every workflow job sets `timeout-minutes`
 
 - **Files:** `.github/workflows/reusable-build.yml`, `.github/workflows/reusable-cache-kernel.yml`,
   `.github/workflows/cleanup.yml`, `.github/workflows/policy-check.yml`, `.github/workflows/pr-metrics.yml`,
