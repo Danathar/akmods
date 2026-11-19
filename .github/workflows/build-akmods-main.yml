@@ -60,6 +60,7 @@ jobs:
       contents: read
     needs: [build-main_45_common]
     runs-on: ubuntu-26.04
+    timeout-minutes: 5
     if: always()
     steps:
       - name: Check for Build Failures
@@ -105,6 +106,7 @@ jobs:
       contents: read
     needs: [build-main_44_common]
     runs-on: ubuntu-26.04
+    timeout-minutes: 5
     if: always()
     steps:
       - name: Check for Build Failures
