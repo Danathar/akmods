@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { globMatches, tokenize } from '../shell-reader.mjs';
+import { expandWrapperOptions, globMatches, tokenize } from '../shell-reader.mjs';
 import { startState } from '../guard-bash.mjs';
 
 const HOOK = fileURLToPath(new URL('../guard-bash.mjs', import.meta.url));
@@ -351,6 +351,22 @@ const allowed = [
     'git --attr-source HEAD log -- certs/production/KSIGN.der',
     // -c takes the next word, so `log` is the subcommand here
     'git -c color.ui=never log -- certs/production/KSIGN.der',
+    // T6: removing or un-exporting another variable, or clearing the environment
+    // of a command that is not git, leaves the GIT_CONFIG_* settings env alone.
+    'unset FOO; git log -1',
+    'unset -v FOO BAR',
+    'env -u FOO git log -1',
+    'env --unset=FOO git log -1',
+    'export -n FOO',
+    'declare +x FOO',
+    'env -i ls',
+    'exec -a name ls',
+    'exec -a name git log -1',
+    'git grep "env -i"',
+    'export GIT_CONFIG_COUNT',
+    // env's split string is one value, so a string without env options still runs as before.
+    "env --split-string 'git log -1'",
+    "env --split 'git log -1'",
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -475,6 +491,39 @@ const blocked = [
     ['git -c safe.bareRepository all log -p', 'safe.*'],
     ['git --config-env=safe.bareRepository=V log -p', 'safe.*'],
     ['git --config-env safe.bareRepository=V log -p', 'safe.*'],
+    // T6: removing, un-exporting or overwriting the GIT_CONFIG_* settings env,
+    // or emptying git's environment, switches the same protection off.
+    ['unset GIT_CONFIG_COUNT; git log -p', 'unset GIT_CONFIG_COUNT'],
+    ['unset GIT_CONFIG_KEY_0', 'remove the GIT_CONFIG_* settings env'],
+    ['unset ${!GIT_CONFIG@}', 'remove the GIT_CONFIG_* settings env'],
+    ['unset $v', 'unset $v'],
+    ['export -n GIT_CONFIG_COUNT; git log -p', 'export -n'],
+    ['declare +x GIT_CONFIG_COUNT; git log -p', 'remove the GIT_CONFIG_* settings env'],
+    ['typeset +x GIT_CONFIG_VALUE_0', 'remove the GIT_CONFIG_* settings env'],
+    ['env -u GIT_CONFIG_COUNT git log -p', 'env -u GIT_CONFIG_COUNT'],
+    ['env -uGIT_CONFIG_COUNT git log -p', 'env -u GIT_CONFIG_COUNT'],
+    ['env --unset=GIT_CONFIG_COUNT git log -p', 'env -u GIT_CONFIG_COUNT'],
+    ['env --uns GIT_CONFIG_COUNT git log -p', 'env -u GIT_CONFIG_COUNT'],
+    ['env -i git log -p', 'without the GIT_CONFIG_* settings env'],
+    ['env - git log -p', 'without the GIT_CONFIG_* settings env'],
+    ['env --ignore-environment git log -p', 'without the GIT_CONFIG_* settings env'],
+    ['env -iv git log -p', 'without the GIT_CONFIG_* settings env'],
+    ['timeout 5 env -i git log -p', 'without the GIT_CONFIG_* settings env'],
+    ["env -i bash -c 'git log -p'", 'without the GIT_CONFIG_* settings env'],
+    ['exec -c git log -p', 'without the GIT_CONFIG_* settings env'],
+    ['exec -cl git log -p', 'without the GIT_CONFIG_* settings env'],
+    ['exec -a name -c git log -p', 'without the GIT_CONFIG_* settings env'],
+    ['GIT_CONFIG_COUNT=0; git log -p', 'overwrites the GIT_CONFIG_* settings env'],
+    ['GIT_CONFIG_VALUE_0=all', 'overwrites the GIT_CONFIG_* settings env'],
+    ['declare GIT_CONFIG_COUNT=0', 'overwrites the GIT_CONFIG_* settings env'],
+    ['readonly GIT_CONFIG_COUNT=0', 'overwrites the GIT_CONFIG_* settings env'],
+    // env reads its split string as its own arguments, options included, in
+    // every spelling of -S (#305): the reader keeps the string as one value.
+    ["env -S '-i git log -p'", 'without the GIT_CONFIG_* settings env'],
+    ["env -S'-i git log -p'", 'without the GIT_CONFIG_* settings env'],
+    ["env --split-string '-i git log -p'", 'without the GIT_CONFIG_* settings env'],
+    ["env --split '-i git log -p'", 'without the GIT_CONFIG_* settings env'],
+    ["env --split-string='-i git log -p'", 'without the GIT_CONFIG_* settings env'],
     // naming a repository is what safe.bareRepository=explicit allows, so a bare folder a branch planted
     // is used when named; --work-tree makes git read tracked paths from another directory
     ['git --git-dir=evil log -p', 'named repository'],
@@ -1348,6 +1397,17 @@ test('tokenize adds an extglob reading only for a group, and a joined one only f
         [['/usr/bin/g@'], ['i'], ['t', 'diff'], ['/usr/bin/g*t', 'diff']]);
     assert.deepEqual(words("bash -c 'g@\\\n(i)t push'"),
         [['bash', '-c', 'g@\\\n(i)t push'], ['bash', '-c', 'g*t push']]);
+});
+
+// env -S / --split-string takes the next word whole (#305); listing it as a
+// flag split the string into a fake cluster of short options.
+test('expandWrapperOptions keeps the value of env --split-string as one word', () => {
+    assert.deepEqual(expandWrapperOptions('env', ['env', '--split-string', '-i git log -p']),
+        ['env', '--split-string', '-i git log -p']);
+    assert.deepEqual(expandWrapperOptions('env', ['env', '--split', '-i git log -p']),
+        ['env', '--split-string', '-i git log -p']);
+    assert.deepEqual(expandWrapperOptions('env', ['env', '-S', '-i git log -p']), ['env', '-S', '-i git log -p']);
+    assert.deepEqual(expandWrapperOptions('env', ['env', '-iS', '-u X', 'y']), ['env', '-i', '-S', '-u X', 'y']);
 });
 
 test('an internal error fails closed (exit 2), not open', () => {

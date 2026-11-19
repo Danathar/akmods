@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const READER_PATH = `${ROOT}.claude/hooks/shell-reader.mjs`;
-const READER_SHA256 = '6491f5e7bf1455b5f96648963ea29fc05456b5d2f638ce32b1428fe3bfb5f0ef';
+const READER_SHA256 = '724a0a3ae217fc86364526d1f94222ee7179d51906b4a94bbc2dea7279b7b95c';
 
 test('the shell reader is the canonical copy', () => {
     assert.equal(createHash('sha256').update(readFileSync(READER_PATH)).digest('hex'), READER_SHA256,

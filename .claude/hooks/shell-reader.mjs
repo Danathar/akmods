@@ -707,7 +707,7 @@ export const WRAPPER_VALUE_OPTS = {
     xargs: ['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--max-chars', '--delimiter', '--arg-file', '--process-slot-var'],
     stdbuf: ['-i', '-o', '-e', '--input', '--output', '--error'],
     ionice: ['-c', '-n', '-p', '-P', '-u', '--class', '--classdata', '--pid', '--pgid', '--uid'],
-    env: ['-u', '--unset', '-C', '--chdir', '-a', '--argv0'],
+    env: ['-u', '--unset', '-C', '--chdir', '-a', '--argv0', '-S', '--split-string'],
     exec: ['-a'],
     time: ['-f', '--format', '-o', '--output'],
     flock: ['-w', '--timeout', '--wait', '-E', '--conflict-exit-code', '--start', '--length'],
