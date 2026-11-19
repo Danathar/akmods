@@ -324,6 +324,20 @@ which also runs upstream's signing-helper tests.
   cleanly or conflict only on context lines. Keep upstream's version.
 - **Remove when:** upstream merges ublue-os/akmods#637 and the fork syncs it. Delete this entry then.
 
+### T13 - Every workflow job sets `timeout-minutes`
+
+- **Files:** `.github/workflows/reusable-build.yml`, `.github/workflows/reusable-cache-kernel.yml`,
+  `.github/workflows/cleanup.yml`, `.github/workflows/policy-check.yml`, `.github/workflows/pr-metrics.yml`,
+  `.github/workflows/scorecard.yml`, `workflow-templates/check-status.yaml.in` (and through
+  `just generate-workflows` the `check-*` jobs in `.github/workflows/build-akmods-*.yml`),
+  `tests/unit/workflow_timeouts.bats`
+- **What:** one `timeout-minutes` line per job that runs steps (5 for policy and check jobs, 90 for the
+  build and kernel cache jobs, 30 for manifest, 20 for verification, 15 for housekeeping).
+- **Why:** without a limit a hung job holds a runner for GitHub's default of 360 minutes (#304).
+- **Merge note:** a one-line addition under each job's `runs-on:`. Keep ours; if upstream adds its own
+  value, prefer upstream's.
+- **Remove when:** upstream sets `timeout-minutes` on all of these jobs. Delete this entry and the test then.
+
 ### ZFS build tools on the `main` flavor
 
 Not a patch: the shared root cause of T4 and T6 (and the retired T5), written down so the next instance is caught at the

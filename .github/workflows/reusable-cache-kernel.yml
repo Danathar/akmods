@@ -46,6 +46,7 @@ concurrency:
 jobs:
   policy:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       publish: ${{ steps.decision.outputs.publish }}
     steps:
@@ -59,6 +60,7 @@ jobs:
       deployment: false
     name: Cache ${{ matrix.architecture }}
     runs-on: ${{ matrix.architecture == 'x86_64' && 'ubuntu-26.04' || 'ubuntu-26.04-arm' }}
+    timeout-minutes: 90
     outputs:
       KCKEY: ${{ steps.cache-key.outputs.key }}
     container:
@@ -139,6 +141,7 @@ jobs:
   check:
     name: Check all ${{ format('{0}-{1}', inputs.kernel_flavor, inputs.version) }} cache successful
     runs-on: ubuntu-26.04
+    timeout-minutes: 5
     needs: [cache-kernel]
     permissions:
       actions: read
