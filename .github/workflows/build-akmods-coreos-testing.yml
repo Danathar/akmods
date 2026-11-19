@@ -78,6 +78,7 @@ jobs:
       contents: read
     needs: [build-coreos-testing_45_common,build-coreos-testing_45_zfs]
     runs-on: ubuntu-26.04
+    timeout-minutes: 5
     if: always()
     steps:
       - name: Check for Build Failures

@@ -70,6 +70,7 @@ concurrency:
 jobs:
   policy:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       publish: ${{ steps.decision.outputs.publish }}
     steps:
@@ -85,6 +86,7 @@ jobs:
       KSIGN_MODE: ${{ needs.policy.outputs.publish == 'true' && 'production' || 'test' }}
     name: Build ${{ matrix.architecture }}
     runs-on: ${{ matrix.architecture == 'x86_64' && 'ubuntu-26.04' || 'ubuntu-26.04-arm' }}
+    timeout-minutes: 90
     permissions:
       actions: read
       contents: read
@@ -181,6 +183,7 @@ jobs:
   manifest:
     name: "Generate ${{ inputs.akmods_target != 'common' && format('akmods-{0}', inputs.akmods_target) || 'akmods' }}:${{ inputs.kernel_flavor }}-${{ inputs.version }} Manifest"
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     needs: [policy, build-akmods]
     outputs:
       image_name: ${{ steps.digest.outputs.image_name }}
@@ -279,6 +282,7 @@ jobs:
   verify-publication:
     name: Verify Published Signatures and Provenance
     runs-on: ubuntu-26.04
+    timeout-minutes: 20
     needs: [policy, manifest]
     if: needs.policy.outputs.publish == 'true'
     permissions:

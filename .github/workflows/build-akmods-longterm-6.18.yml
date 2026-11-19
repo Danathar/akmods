@@ -60,6 +60,7 @@ jobs:
       contents: read
     needs: [build-longterm-6-18_44_zfs]
     runs-on: ubuntu-26.04
+    timeout-minutes: 5
     if: always()
     steps:
       - name: Check for Build Failures
