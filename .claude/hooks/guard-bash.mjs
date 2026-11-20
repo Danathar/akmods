@@ -471,9 +471,11 @@ function checkPrCreate(args) {
 // that look for the subcommand (checkGit and gitSubcommand) skip that word, so
 // `git --attr-source X push` is read as `push`, not `X` (#297). Keep one list
 // so an addition reaches both. `--super-prefix` is gone from git 2.42+, but
-// older git still reads it this way.
+// older git still reads it this way. checkGit refuses `--shallow-file` before
+// the walk reaches it; it is listed so gitSubcommand reads past it too.
 const GIT_GLOBAL_OPTIONS_WITH_VALUE = [
     '-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env', '--attr-source', '--super-prefix',
+    '--shallow-file',
 ];
 
 // `safe.*` git config keys. The settings env sets safe.bareRepository=explicit
@@ -544,6 +546,12 @@ function checkGit(args, inlineEnv = {}, exported = {}) {
         }
         if (a.startsWith('--exec-path=')) {
             return block('Blocked: `git --exec-path=DIR` runs git commands from another directory.');
+        }
+        // `git --shallow-file FILE` reads FILE, a path the index need not hold,
+        // and prints its first line when it is not a list of commits
+        // (`--shallow-file .env`). Ordinary work never needs it.
+        if (a === '--shallow-file' || a.startsWith('--shallow-file=')) {
+            return block('Blocked: `git --shallow-file FILE` makes git read FILE and can print its first line.');
         }
         i += GIT_GLOBAL_OPTIONS_WITH_VALUE.includes(a) ? 2 : 1;
     }
