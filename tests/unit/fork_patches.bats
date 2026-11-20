@@ -228,7 +228,7 @@ STUB
         [ "${status}" -eq 0 ]
         run grep -F "build-kmod-${k}.sh ||" "${REPO_ROOT}/Containerfile.in"
         [ "${status}" -eq 1 ]
-        run grep -F "| common | [${k}]" "${REPO_ROOT}/README.md"
+        run grep -F "| common (ogc and ogc-lts only) | [${k}]" "${REPO_ROOT}/README.md"
         [ "${status}" -eq 0 ]
         run grep -F "| extra | [${k}]" "${REPO_ROOT}/README.md"
         [ "${status}" -eq 1 ]
