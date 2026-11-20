@@ -472,6 +472,15 @@ const blocked = [
     ['GIT_EXTERNAL_DIFF=x git diff', 'GIT_EXTERNAL_DIFF'],
     ['git -c core.pager=x log', 'run a program'],
     ['git --exec-path=/tmp/x status', 'exec-path'],
+    // --shallow-file reads a file and takes the next word as its value, so the
+    // walk used to stop there and skip every later rule
+    ['git --shallow-file .env log -1', 'shallow-file'],
+    ['git --shallow-file=.env log -1', 'shallow-file'],
+    ['git --shallow-file x push --force origin main', 'shallow-file'],
+    ['git --shallow-file x reset --hard', 'shallow-file'],
+    ['git -C . --shallow-file x clean -fdx', 'shallow-file'],
+    ['git --shallow-file HEAD --git-dir=evil log -p', 'shallow-file'],
+    ['git --shallow-file x -c safe.bareRepository=all log -p', 'shallow-file'],
     ['git fetch --upload-pack x ../src', 'runs the program'],
     ['git fetch --upload-pack=x', 'runs the program'],
     ['git fetch --upl=x ../src', 'runs the program'],
