@@ -65,6 +65,10 @@
 //       `GIT_CONFIG_*=...` statement or such an operand of declare/typeset/
 //       local/readonly; and git run behind `env -i`, `--ignore-environment`,
 //       a lone `-`, or `exec -c`, which empty its environment.
+//   T7  an assignment to HOME, XDG_CONFIG_HOME or PATH (or `NAME+=`): in front
+//       of any command, through `env NAME=value`, as a statement of its own,
+//       or as an operand of export/declare/typeset/local/readonly. The first
+//       two choose the global git config file, PATH chooses which git runs.
 //   node
 //   N1  `node --test` with any option outside the test-runner allowlist, and
 //       node with NODE_OPTIONS or another NODE_* variable. `node --test` after a
@@ -518,6 +522,24 @@ function blockSettingsEnvOverwrite(what) {
         `Blocked: \`${what}\` overwrites the GIT_CONFIG_* settings env in .claude/settings.json that stops a ` +
             'committed repository folder from running a program; the variable stays exported, so git reads the ' +
             'new value. Leave it set.'
+    );
+}
+
+// HOME and XDG_CONFIG_HOME pick the folder git reads its global config from
+// (`$HOME/.gitconfig`, `$XDG_CONFIG_HOME/git/config`), and the GIT_CONFIG_*
+// settings env replaces neither file: `HOME=planted git diff` runs a
+// diff.external that a branch committed in planted/.gitconfig. PATH picks the
+// file named git that the shell runs: `PATH=planted:$PATH git log` runs a
+// planted/git. All three are always exported, so a statement of its own
+// (`HOME=planted; git log -p`) reaches every later command too. A key `NAME+`
+// is the `NAME+=value` append form.
+const CONFIG_REACH_ENV = /^(HOME|XDG_CONFIG_HOME|PATH)\+?$/;
+
+function blockConfigReach(what) {
+    return block(
+        `Blocked: \`${what}\` changes where git reads its global config (HOME, XDG_CONFIG_HOME) or which ` +
+            'program runs as git (PATH), so a folder a branch committed can make git run a program. ' +
+            'Run commands with the HOME and PATH you already have.'
     );
 }
 
@@ -1584,6 +1606,9 @@ function checkSegment(words, state) {
             // Only assignments: they set shell variables, and an exported one keeps its export.
             const name = Object.keys(inlineEnv).find((k) => k.includes('GIT_CONFIG'));
             if (name !== undefined) return blockSettingsEnvOverwrite(`${name}=${inlineEnv[name]}`);
+            // T7: `HOME=planted;` / `PATH=planted:$PATH;` reach every later git.
+            const reach = Object.keys(inlineEnv).find((k) => CONFIG_REACH_ENV.test(k));
+            if (reach !== undefined) return blockConfigReach(`${reach}=${inlineEnv[reach]}`);
             return null;
         }
         // A name the shell builds (#171): braces are refused, since the words
@@ -1694,6 +1719,9 @@ function checkSegment(words, state) {
 
     const cmd = basename(w[0]);
     const args = w.slice(1);
+    // T7: `HOME=planted git diff`, `env PATH=planted:$PATH git log`.
+    const reach = Object.keys(inlineEnv).find((k) => CONFIG_REACH_ENV.test(k));
+    if (reach !== undefined) return blockConfigReach(`${reach}=${inlineEnv[reach]} ${cmd}`);
     // C1 (checkCommand has usually set this already for the whole command line).
     if (CHDIR.has(cmd)) {
         state.cwdMoved = true;
@@ -1724,6 +1752,8 @@ function checkSegment(words, state) {
             if (a.startsWith('-') || a.startsWith('+')) continue;
             const eq = a.indexOf('=');
             if (!exports && eq !== -1 && a.slice(0, eq).includes('GIT_CONFIG')) return blockSettingsEnvOverwrite(`${cmd} ${a}`);
+            // T7: `export HOME=planted`, `declare PATH=planted:$PATH`.
+            if (eq !== -1 && CONFIG_REACH_ENV.test(a.slice(0, eq))) return blockConfigReach(`${cmd} ${a}`);
             if (unexports && removesSettingsEnv(eq === -1 ? a : a.slice(0, eq))) {
                 const flags = args.filter((o) => o.startsWith('-') || o.startsWith('+'));
                 return blockSettingsEnvRemoval([cmd, ...flags, a].join(' '));

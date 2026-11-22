@@ -367,6 +367,17 @@ const allowed = [
     // env's split string is one value, so a string without env options still runs as before.
     "env --split-string 'git log -1'",
     "env --split 'git log -1'",
+    // T7: reading HOME or PATH, or setting another name, changes nothing git reads.
+    'cd "$HOME" && git status',
+    'echo "$PATH"',
+    'TZ=UTC; git log -1',
+    'TZ=UTC git log -1',
+    'export FOO=1; git log -1',
+    'export HOME',
+    'export PATHS',
+    'MANPATH=/usr/share/man git log -1',
+    'HOMEBREW_NO_ANALYTICS=1 git log -1',
+    "git log -p -S 'PATH=' -- docs",
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -533,6 +544,23 @@ const blocked = [
     ["env --split-string '-i git log -p'", 'without the GIT_CONFIG_* settings env'],
     ["env --split '-i git log -p'", 'without the GIT_CONFIG_* settings env'],
     ["env --split-string='-i git log -p'", 'without the GIT_CONFIG_* settings env'],
+    // T7: HOME and XDG_CONFIG_HOME choose git's global config file, PATH chooses
+    // which git runs, so a folder a branch committed can make git run a program.
+    ['HOME=planted git diff HEAD~1 HEAD', 'HOME=planted git'],
+    ['HOME=planted; git log -p', 'changes where git reads its global config'],
+    ['HOME+=/planted; git log -p', 'HOME+=/planted'],
+    ['XDG_CONFIG_HOME=planted git diff HEAD~1 HEAD', 'changes where git reads its global config'],
+    ['XDG_CONFIG_HOME=planted; git log -p', 'changes where git reads its global config'],
+    ['PATH=planted:$PATH git log -1', 'changes where git reads its global config'],
+    ['PATH=planted:$PATH; git log -1', 'which program runs as git (PATH)'],
+    ['env HOME=planted git log -p', 'changes where git reads its global config'],
+    ['timeout 5 env PATH=planted:$PATH git log -1', 'changes where git reads its global config'],
+    ["bash -c 'HOME=planted git log -p'", 'changes where git reads its global config'],
+    ['export HOME=planted; git diff HEAD~1 HEAD', 'export HOME=planted'],
+    ['export PATH=planted:$PATH; git diff HEAD~1 HEAD', 'changes where git reads its global config'],
+    ['declare -x XDG_CONFIG_HOME=planted; git log -p', 'changes where git reads its global config'],
+    ['typeset PATH=planted; git log -1', 'Run commands with the HOME and PATH you already have'],
+    ['readonly HOME=planted; git log -p', 'changes where git reads its global config'],
     // naming a repository is what safe.bareRepository=explicit allows, so a bare folder a branch planted
     // is used when named; --work-tree makes git read tracked paths from another directory
     ['git --git-dir=evil log -p', 'named repository'],
