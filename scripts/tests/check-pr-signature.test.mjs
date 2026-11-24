@@ -48,6 +48,12 @@ test('a body without the line, an empty body and no body fail with an error anno
     }
 });
 
+test('the error names both accepted spellings', () => {
+    const r = run('no signature here');
+    assert.match(r.err, /`-- hive: agent=<name>/);
+    assert.match(r.err, /older `— hive:` spelling also counts/);
+});
+
 test('the other attribution markers the audit accepts pass too', () => {
     assert.equal(run('Body\n\nCo-Authored-By: Claude <noreply@anthropic.com>').code, 0);
     assert.equal(run('Body\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)').code, 0);
