@@ -8,7 +8,8 @@
  * an open agent PR instead, so the marker can be added before merge.
  *
  * It uses the audit's own `findSignature`, so the two checks cannot disagree
- * about what counts as a marker: a `— hive: agent=<name> ...` line, a
+ * about what counts as a marker: a `-- hive: agent=<name> ...` line (or the older
+ * `— hive:` spelling), a
  * `Co-Authored-By: Claude` trailer or a "Generated with Claude Code" line,
  * outside fenced code blocks.
  *
@@ -30,7 +31,8 @@ export function main(env = process.env, stdout = process.stdout, stderr = proces
         return 0;
     }
     stderr.write(
-        '::error::The pull request body has no `— hive: agent=<name> ...` signature line ' +
+        '::error::The pull request body has no `-- hive: agent=<name> ...` signature line ' +
+            '(the older `— hive:` spelling also counts) ' +
             '(outside code blocks). The weekly agent audit (agent-audit.yml) will flag this ' +
             'PR once merged. Edit the PR description to add the line; this check reruns on edit.\n',
     );

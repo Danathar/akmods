@@ -14,7 +14,8 @@
  * A PR is agent-authored when ANY of these holds:
  *   - its author is a known agent app (AGENT_LOGINS: the Hive GitHub App, in
  *     `gh` spelling `app/...` or REST spelling `...[bot]`);
- *   - its body carries an agent marker: a `— hive: agent=<name> ...` line, a
+ *   - its body carries an agent marker: a `-- hive: agent=<name> ...` line (or the older
+ *   `— hive:` spelling), a
  *     `Co-Authored-By: Claude` trailer, or a "Generated with Claude Code" line
  *     (lines inside fenced code blocks are examples and are ignored);
  *   - it carries the `ai-fix-requested` label (the AI-fix workflow acted on it)
@@ -65,10 +66,12 @@ export const AGENT_LOGINS = [
 export const AGENT_LABEL = 'ai-fix-requested';
 export const AGENT_BRANCH_PREFIX = 'claude/';
 
-// One marker per line. `— hive:` signature, Claude co-author trailer, or the
-// Claude Code "Generated with" footer.
+// One marker per line. `-- hive:` signature (two ASCII hyphens, written since
+// 2026-11-18) or the older `— hive:` (em dash), Claude co-author trailer, or the
+// Claude Code "Generated with" footer. Three hyphens, or no space after the
+// dashes, is not a signature.
 const MARKER_LINES = [
-    /^— hive:.*(^|\s)agent=\S+/,
+    /^(?:--|—) hive:.*(^|\s)agent=\S+/,
     /^co-authored-by:\s*claude\b.*$/i,
     /^(?:🤖\s*)?generated with \[?claude code\]?/i,
 ];
@@ -257,7 +260,7 @@ function renderPrs(report) {
     );
     if (report.agent === 0) {
         out.push(
-            '**No agent-authored PRs were found, so nothing was audited.** This is not a pass of the audit-trail rules; check the window and the classification (an agent app author, a `— hive: agent=...` / `Co-Authored-By: Claude` / "Generated with Claude Code" body line, the `ai-fix-requested` label, or a `claude/` head branch).',
+            '**No agent-authored PRs were found, so nothing was audited.** This is not a pass of the audit-trail rules; check the window and the classification (an agent app author, a `-- hive: agent=...` / `— hive: agent=...` / `Co-Authored-By: Claude` / "Generated with Claude Code" body line, the `ai-fix-requested` label, or a `claude/` head branch).',
             ''
         );
         return out.join('\n');

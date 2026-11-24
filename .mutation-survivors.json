@@ -140,6 +140,20 @@
             "original": "/\\s+/",
             "replacement": "/\\s/",
             "reason": "Equivalent in checkXargsCerts: splitting the fed text on single whitespace only adds empty words between runs of spaces or newlines, and namesCerts('') is false, so the same words decide whether the input names certs/."
+        },
+        {
+            "file": "scripts/ai-audit-report.mjs",
+            "mutator": "Regex",
+            "original": "/^(?:--|\u2014) hive:.*(^|\\s)agent=\\S+/",
+            "replacement": "/^(?:--|\u2014) hive:.*(\\s)agent=\\S+/",
+            "reason": "Equivalent: the ^ branch cannot match after 'hive:.*' because the dot does not cross a newline and each body line is tested on its own, so only the whitespace branch ever decides."
+        },
+        {
+            "file": "scripts/ai-audit-report.mjs",
+            "mutator": "Regex",
+            "original": "/^(?:--|\u2014) hive:.*(^|\\s)agent=\\S+/",
+            "replacement": "/^(?:--|\u2014) hive:.*(^|\\s)agent=\\S/",
+            "reason": "Equivalent: the pattern is only tested for a match and never captures, so requiring one non-space character matches exactly the same lines as requiring one or more."
         }
     ]
 }
