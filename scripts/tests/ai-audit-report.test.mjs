@@ -14,6 +14,7 @@ import {
 } from '../ai-audit-report.mjs';
 
 const SIG = '— hive: agent=docs-writer backend=claude model=opus';
+const SIG2 = '-- hive: agent=docs-writer backend=claude model=opus';
 
 function pr(overrides = {}) {
     return {
@@ -61,6 +62,21 @@ test('signature must be its own line and name an agent', () => {
     assert.equal(findSignature(`text ${SIG}`), null);
     assert.equal(findSignature('— hive: backend=claude'), null);
     assert.equal(findSignature(`a\r\n${SIG}\r\n`), SIG);
+});
+
+test('the two-hyphen signature the hive writes since 2026-11-18 counts like the em dash one', () => {
+    assert.equal(findSignature(`a\r\n${SIG2}\r\n`), SIG2);
+    assert.equal(findSignature(`text ${SIG2}`), null);
+    assert.equal(findSignature('-- hive: backend=claude'), null);
+    const human = pr({ author: { login: 'Danathar', is_bot: false }, body: `Closes #5\n\nBody.\n\n${SIG2}` });
+    assert.deepEqual(classify(human), { agent: true, reason: 'signature' });
+    assert.deepEqual(auditPr(human), []);
+});
+
+test('three hyphens, no space and one hyphen are not the signature prefix', () => {
+    assert.equal(findSignature('--- hive: agent=docs-writer backend=claude model=opus'), null);
+    assert.equal(findSignature('--hive: agent=docs-writer backend=claude model=opus'), null);
+    assert.equal(findSignature('- hive: agent=docs-writer backend=claude model=opus'), null);
 });
 
 test('a signature inside a fenced code block is an example, not a signature', () => {

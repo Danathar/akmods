@@ -10,6 +10,7 @@ import { AGENT_LOGINS, findSignature } from '../ai-audit-report.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WORKFLOW = path.resolve(here, '..', '..', '.github', 'workflows', 'agent-signature.yml');
 const SIG = '— hive: agent=scanner backend=claude model=opus';
+const SIG2 = '-- hive: agent=scanner backend=claude model=opus';
 
 function run(body) {
     const out = [];
@@ -23,6 +24,20 @@ test('a body with the signature line passes', () => {
     const r = run(`**Summary:** x\n\nRefs #3\n\n${SIG}\n`);
     assert.equal(r.code, 0);
     assert.equal(r.err, '');
+});
+
+test('a body with the two-hyphen signature line passes', () => {
+    const r = run(`**Summary:** x\n\nRefs #3\n\n${SIG2}\n`);
+    assert.equal(r.code, 0);
+    assert.equal(r.err, '');
+});
+
+test('three hyphens and two hyphens with no space fail', () => {
+    for (const body of ['--- hive: agent=scanner backend=claude model=opus', '--hive: agent=scanner backend=claude model=opus']) {
+        const r = run(body);
+        assert.equal(r.code, 1, JSON.stringify(body));
+        assert.match(r.err, /^::error::/);
+    }
 });
 
 test('a body without the line, an empty body and no body fail with an error annotation', () => {
@@ -58,6 +73,12 @@ test('the PR-time check agrees with the audit on every body', () => {
         '— hive: backend=claude agent=x',
         '— hive: agent=',
         '- hive: agent=x',
+        SIG2,
+        `x\r\n${SIG2}\r\n`,
+        '-- hive: agent=',
+        '--- hive: agent=x',
+        '--hive: agent=x',
+        `\`\`\`\n${SIG2}\n\`\`\``,
         'Co-Authored-By: Claude Opus <noreply@anthropic.com>',
         '🤖 Generated with [Claude Code](https://claude.com/claude-code)',
         'Co-Authored-By: someone else',
