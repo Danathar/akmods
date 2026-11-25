@@ -196,8 +196,8 @@ import {
     ARGUMENT_ONLY_PROGRAMS, BUDGET_MS, changesDirectory, CHDIR, closeParen, COMMAND_STRING_SEPARATORS, commandNameReader,
     commandStrings, EXEC_GIT_CONFIG, expandWrapperOptions, extractSubstitutions, FIND_EXEC, firstWord, fishScripts,
     GIT_EXEC_OPTION, GIT_SHORT_UPLOAD_PACK, GIT_UPLOAD_PACK_OPTION, GIT_UPLOAD_PACK_SUBCOMMANDS, isAssignment,
-    KEYWORDS, MAX_UNLISTED_INNER, OverBudget, readAnsiC, readHeredocStart, REFUSED_GIT_OPTION, RISKY_GIT_CONFIG, riskyEnv,
-    SAFE_ENV, SHELLS, skipHeredocBody, spend, startBudget, tokenize, unquoted, WATCHED_ENV, WRAPPERS, wrapperTarget,
+    KEYWORDS, MAX_UNLISTED_INNER, OverBudget, REFUSED_GIT_OPTION, RISKY_GIT_CONFIG, riskyEnv, SAFE_ENV, SHELLS, spend,
+    startBudget, tokenize, unquoted, walkExpanded, WATCHED_ENV, WRAPPERS, wrapperTarget,
 } from './shell-reader.mjs';
 
 // Kept importable from here, where they were defined before the split.
@@ -578,32 +578,12 @@ function assignedNames(cmd, args) {
 // `(` opens a subshell, so `( echo PATH )` names nothing.
 function arithmeticNames(input) {
     const names = [];
-    let inSingle = false;
-    let inDouble = false;
-    const pending = []; // heredocs started on the current line
-    for (let i = 0; i < input.length; i++) {
-        const c = input[i];
-        if (c === '\\' && !inSingle) {
-            i++;
-        } else if (c === '$' && input[i + 1] === "'" && !inSingle && !inDouble) {
-            i = readAnsiC(input, i + 2).next - 1;
-        } else if (c === "'" && !inDouble) {
-            inSingle = !inSingle;
-        } else if (c === '"' && !inSingle) {
-            inDouble = !inDouble;
-        } else if (!inSingle && !inDouble && c === '<' && input[i + 1] === '<' && input[i + 2] !== '<') {
-            const h = readHeredocStart(input, i);
-            if (h.delim) pending.push(h);
-            i = h.next - 1;
-        } else if (!inSingle && !inDouble && c === '\n' && pending.length) {
-            while (pending.length && pending[0].quoted) i = skipHeredocBody(input, i + 1, pending.shift().delim) - 1;
-            pending.length = 0;
-        } else if (!inSingle && c === '(' && input[i + 1] === '(' && (!inDouble || input[i - 1] === '$')) {
-            const end = closeParen(input, i + 1);
-            names.push(...(input.slice(i + 2, end).match(ARITHMETIC_NAME) ?? []));
-            i = end - 1;
-        }
-    }
+    walkExpanded(input, (text, i, inDouble) => {
+        if (text[i] !== '(' || text[i + 1] !== '(' || (inDouble && text[i - 1] !== '$')) return undefined;
+        const end = closeParen(text, i + 1);
+        names.push(...(text.slice(i + 2, end).match(ARITHMETIC_NAME) ?? []));
+        return end;
+    });
     return names;
 }
 

@@ -152,6 +152,7 @@ function readSegments(input) {
     let words = [];
     let word = null; // null = no word in progress ('' = empty quoted word)
     const pendingHeredocs = [];
+    let braces = 0; // open `${`, inside which ` #` is a pattern and not a comment
 
     let skip = null; // 'in' | 'out': the next word is a redirection target
     let stdinFrom; // target of `< file` for the current segment
@@ -228,8 +229,8 @@ function readSegments(input) {
                 append(input[i + 1] ?? '');
                 i += 2;
             }
-        } else if (c === '#' && word === null) {
-            while (i < input.length && input[i] !== '\n') i++; // comment
+        } else if (c === '#' && word === null && braces === 0) {
+            i = skipComment(input, i);
         } else if (c === '\n') {
             endSegment();
             i++;
@@ -252,6 +253,12 @@ function readSegments(input) {
                     }
                 }
                 seg.heredocBody = (seg.heredocBody ?? '') + input.slice(bodyStart, bodyEnd);
+                // No line ends this body: the `<<` may be a shift (`(( n = 1 << 2 ))`),
+                // so the lines after it are read as commands too.
+                if (bodyEnd === input.length) {
+                    spend();
+                    i = bodyStart;
+                }
             }
         } else if (c === '<' && input[i + 1] === '<' && input[i + 2] !== '<') {
             const { delim, next } = readHeredocStart(input, i);
@@ -298,7 +305,12 @@ function readSegments(input) {
         } else if (c === '$' && input[i + 1] === '"') {
             // `$"git"` (locale quoting) quotes like `"git"`: the word is `git`, not `$git`.
             i++;
+        } else if (c === '$' && input[i + 1] === '{') {
+            braces++;
+            append('${');
+            i += 2;
         } else {
+            if (c === '}' && braces > 0) braces--;
             append(c);
             i++;
         }
@@ -369,46 +381,117 @@ export function readAnsiC(input, i) {
     return { text, next: end + 1 };
 }
 
+/** Index of the newline that ends the comment starting at input[i] (or the end of the input). */
+export function skipComment(input, i) {
+    const eol = input.indexOf('\n', i);
+    return eol === -1 ? input.length : eol;
+}
+
+// A `#` after one of these (or at the start) begins a comment.
+const WORD_BREAK = ' \t\n;&|()<>';
+
 /**
- * Find the bodies of $(...) and `...` substitutions, including ones inside
- * double quotes (but not single quotes), so they can be analysed as commands.
+ * Walk the characters of a command line the shell does not take literally, and
+ * call visit(text, i, inDouble) for each: text is what is being read (the
+ * command line, or one here-document body) and i the index in it. visit returns
+ * the index to carry on from, or undefined to step over one character.
+ *
+ * Single-quoted text, `$'...'`, escaped characters and the bodies of
+ * here-documents with a quoted delimiter are data and are not visited. Quotes
+ * mean nothing in a comment or in the body of any other here-document, so those
+ * are walked without them, as text inside double quotes (an apostrophe there
+ * opens no quote). A comment runs nothing; it is walked to refuse more.
  */
-export function extractSubstitutions(input) {
-    const found = [];
+export function walkExpanded(input, visit) {
     let inSingle = false;
     let inDouble = false;
-    const pending = []; // heredocs started on the current line
+    let wordStart = true;
+    let braces = 0; // open `${`, inside which ` #` is a pattern and not a comment
+    let toEnd = false; // a body no line ends has been walked to the end of the input
+    const pending = []; // here-documents started on the current line
     for (let i = 0; i < input.length; i++) {
         const c = input[i];
+        const plain = !inSingle && !inDouble;
+        const atWord = wordStart;
+        wordStart = plain && WORD_BREAK.includes(c);
         if (c === '\\' && !inSingle) {
             i++;
-        } else if (c === '$' && input[i + 1] === "'" && !inSingle && !inDouble) {
+            if (input[i] === '\n') wordStart = atWord; // a joined line
+        } else if (c === '$' && input[i + 1] === "'" && plain) {
             // `$'...'` holds no substitution, and `\'` does not end it.
             i = readAnsiC(input, i + 2).next - 1;
         } else if (c === "'" && !inDouble) {
             inSingle = !inSingle;
         } else if (c === '"' && !inSingle) {
             inDouble = !inDouble;
-        } else if (!inSingle && !inDouble && c === '<' && input[i + 1] === '<' && input[i + 2] !== '<') {
+        } else if (c === '#' && plain && atWord && braces === 0) {
+            // Its quotes mean nothing, but a substitution written in it still counts.
+            const end = skipComment(input, i);
+            walkBody(input.slice(i, end), visit);
+            i = end - 1;
+        } else if (plain && c === '<' && input[i + 1] === '<' && input[i + 2] !== '<') {
             const h = readHeredocStart(input, i);
             if (h.delim) pending.push(h);
             i = h.next - 1;
-        } else if (!inSingle && !inDouble && c === '\n' && pending.length) {
-            // A quoted heredoc body is data (Markdown backticks in a PR body are not
-            // commands). An unquoted body is expanded by the shell, so it is scanned.
-            while (pending.length && pending[0].quoted) i = skipHeredocBody(input, i + 1, pending.shift().delim) - 1;
-            pending.length = 0;
-        } else if (!inSingle && (c === '$' || (!inDouble && (c === '<' || c === '>'))) && input[i + 1] === '(') {
-            const j = closeParen(input, i + 2);
-            found.push(input.slice(i + 2, j - 1));
-            i = j - 1; // nested substitutions are found by the recursive analysis
-        } else if (!inSingle && c === '`') {
-            const end = input.indexOf('`', i + 1);
-            const stop = end === -1 ? input.length : end;
-            found.push(input.slice(i + 1, stop));
-            i = stop;
+            wordStart = false;
+        } else if (plain && c === '\n' && pending.length) {
+            while (pending.length) {
+                const { delim, quoted } = pending.shift();
+                const start = i + 1;
+                const { end, next } = heredocBody(input, start, delim);
+                if (next === null) {
+                    // No line ends this body: the `<<` may be a shift, so the rest
+                    // is read both as a body and as commands.
+                    if (!quoted && !toEnd) walkBody(input.slice(start), visit);
+                    toEnd = true;
+                    continue;
+                }
+                // A quoted body is data (Markdown backticks in a PR body are not commands).
+                if (!quoted) walkBody(input.slice(start, end), visit);
+                i = next - 1;
+            }
+        } else if (!inSingle) {
+            if (plain && c === '$' && input[i + 1] === '{') braces++;
+            else if (plain && c === '}' && braces > 0) braces--;
+            const next = visit(input, i, inDouble);
+            if (next !== undefined) {
+                i = next - 1;
+                wordStart = false;
+            }
         }
     }
+}
+
+/** The part of walkExpanded() that reads a comment or the body of an unquoted here-document. */
+function walkBody(body, visit) {
+    for (let i = 0; i < body.length; i++) {
+        if (body[i] === '\\') i++;
+        else i = (visit(body, i, true) ?? i + 1) - 1;
+    }
+}
+
+/**
+ * Find the bodies of $(...) and `...` substitutions, including ones inside
+ * double quotes and here-document bodies (but not single quotes), so they can
+ * be analysed as commands.
+ */
+export function extractSubstitutions(input) {
+    const found = [];
+    walkExpanded(input, (text, i, inDouble) => {
+        const c = text[i];
+        if ((c === '$' || (!inDouble && (c === '<' || c === '>'))) && text[i + 1] === '(') {
+            const end = closeParen(text, i + 2);
+            found.push(text.slice(i + 2, end - 1));
+            return end; // nested substitutions are found by the recursive analysis
+        }
+        if (c === '`') {
+            const end = text.indexOf('`', i + 1);
+            const stop = end === -1 ? text.length : end;
+            found.push(text.slice(i + 1, stop));
+            return stop + 1;
+        }
+        return undefined;
+    });
     return found;
 }
 
@@ -435,6 +518,7 @@ export function closeParen(input, j) {
     let plain = true; // the word holds no quote or escape, so it can be a reserved word
     let wordAtCommand = false;
     let atCommand = true;
+    let braces = 0; // open `${`, inside which ` #` is a pattern and not a comment
     const endWord = () => {
         if (word === '') return;
         const top = cases.at(-1);
@@ -479,6 +563,8 @@ export function closeParen(input, j) {
         } else if (d === "'" || d === '"') {
             addToWord(d, false);
             q = d;
+        } else if (d === '#' && word === '' && braces === 0) {
+            j = skipComment(input, j) - 1; // a quote or paren in a comment is text
         } else if (d === '<' && input[j + 1] === '<' && input[j + 2] !== '<') {
             endWord();
             const h = readHeredocStart(input, j);
@@ -515,6 +601,8 @@ export function closeParen(input, j) {
                 atCommand = true;
             }
         } else {
+            if (d === '{' && input[j - 1] === '$') braces++;
+            else if (d === '}' && braces > 0) braces--;
             addToWord(d, true);
         }
     }
@@ -560,16 +648,24 @@ export function readHeredocStart(input, i) {
     return { delim, quoted, next: i };
 }
 
-/** Index just past the line that closes a heredoc whose body starts at `i`. */
-export function skipHeredocBody(input, i, delim) {
+/**
+ * Where the heredoc body that starts at `i` ends: { end, next } (end = start of
+ * the line that closes it, next = index past that line, null when no line does).
+ */
+function heredocBody(input, i, delim) {
+    spend();
     while (i < input.length) {
         let eol = input.indexOf('\n', i);
         if (eol === -1) eol = input.length;
-        const line = input.slice(i, eol).replace(/^\t+/, '');
+        if (input.slice(i, eol).replace(/^\t+/, '') === delim) return { end: i, next: eol + 1 };
         i = eol + 1;
-        if (line === delim) break;
     }
-    return i;
+    return { end: input.length, next: null };
+}
+
+/** Index just past the line that closes a heredoc whose body starts at `i`. */
+export function skipHeredocBody(input, i, delim) {
+    return heredocBody(input, i, delim).next ?? input.length + 1;
 }
 
 // ---------------------------------------------------------------------------
