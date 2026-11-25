@@ -69,6 +69,10 @@
 //       of any command, through `env NAME=value`, as a statement of its own,
 //       or as an operand of export/declare/typeset/local/readonly. The first
 //       two choose the global git config file, PATH chooses which git runs.
+//       The same names, and the GIT_CONFIG_* ones of T6, assigned by read,
+//       mapfile/readarray, getopts, printf -v, let, a for/select loop
+//       variable, or named in an arithmetic command or expansion
+//       (`(( PATH = 1 ))`, `: $(( HOME = 1 ))`).
 //   node
 //   N1  `node --test` with any option outside the test-runner allowlist, and
 //       node with NODE_OPTIONS or another NODE_* variable. `node --test` after a
@@ -189,11 +193,11 @@ import { fileURLToPath } from 'node:url';
 // Reading the command line as the shell would is shared with the other
 // repositories that carry this guard; see shell-reader.mjs.
 import {
-    ARGUMENT_ONLY_PROGRAMS, BUDGET_MS, changesDirectory, CHDIR, COMMAND_STRING_SEPARATORS, commandNameReader,
+    ARGUMENT_ONLY_PROGRAMS, BUDGET_MS, changesDirectory, CHDIR, closeParen, COMMAND_STRING_SEPARATORS, commandNameReader,
     commandStrings, EXEC_GIT_CONFIG, expandWrapperOptions, extractSubstitutions, FIND_EXEC, firstWord, fishScripts,
     GIT_EXEC_OPTION, GIT_SHORT_UPLOAD_PACK, GIT_UPLOAD_PACK_OPTION, GIT_UPLOAD_PACK_SUBCOMMANDS, isAssignment,
-    KEYWORDS, MAX_UNLISTED_INNER, OverBudget, REFUSED_GIT_OPTION, RISKY_GIT_CONFIG, riskyEnv, SAFE_ENV, SHELLS,
-    spend, startBudget, tokenize, unquoted, WATCHED_ENV, WRAPPERS, wrapperTarget,
+    KEYWORDS, MAX_UNLISTED_INNER, OverBudget, readAnsiC, readHeredocStart, REFUSED_GIT_OPTION, RISKY_GIT_CONFIG, riskyEnv,
+    SAFE_ENV, SHELLS, skipHeredocBody, spend, startBudget, tokenize, unquoted, WATCHED_ENV, WRAPPERS, wrapperTarget,
 } from './shell-reader.mjs';
 
 // Kept importable from here, where they were defined before the split.
@@ -541,6 +545,66 @@ function blockConfigReach(what) {
             'program runs as git (PATH), so a folder a branch committed can make git run a program. ' +
             'Run commands with the HOME and PATH you already have.'
     );
+}
+
+// A name assigned by something other than a NAME=value word has the effect of
+// that statement, so it gets the same refusal.
+function checkAssigned(name, what) {
+    const base = name.replace(/\[.*$/, '');
+    if (base.includes('GIT_CONFIG')) return blockSettingsEnvOverwrite(what);
+    return CONFIG_REACH_ENV.test(base) ? blockConfigReach(what) : null;
+}
+
+const ARITHMETIC_NAME = /(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*/g;
+
+// The names a builtin assigns. An option (`read -r`) or its value (`read -n 3`)
+// is looked at as if it were a name; only one spelled like a watched name is
+// refused for it.
+// `let` words are arithmetic, so every name in them counts.
+function assignedNames(cmd, args) {
+    if (['read', 'mapfile', 'readarray', 'getopts'].includes(cmd)) return args;
+    if (cmd === 'printf' && args[0]?.startsWith('-v')) return [args[0].length > 2 ? args[0].slice(2) : (args[1] ?? '')];
+    if (cmd === 'let') return args.flatMap((a) => a.match(ARITHMETIC_NAME) ?? []);
+    if (cmd === 'for' || cmd === 'select') return args.slice(0, 1);
+    return [];
+}
+
+// `(( PATH = 1 ))` and `: $(( HOME = 1 ))` assign as `let PATH=1` does. The
+// reader splits the parens off and leaves the plain words `PATH = 1`, so the
+// expression is read here from the command line: every whole name between `((`
+// and the paren that closes them counts as assigned. A name that is only read
+// counts too, which only refuses more. Single-quoted text and quoted heredoc
+// bodies are data, and inside double quotes only `$((` is arithmetic. A single
+// `(` opens a subshell, so `( echo PATH )` names nothing.
+function arithmeticNames(input) {
+    const names = [];
+    let inSingle = false;
+    let inDouble = false;
+    const pending = []; // heredocs started on the current line
+    for (let i = 0; i < input.length; i++) {
+        const c = input[i];
+        if (c === '\\' && !inSingle) {
+            i++;
+        } else if (c === '$' && input[i + 1] === "'" && !inSingle && !inDouble) {
+            i = readAnsiC(input, i + 2).next - 1;
+        } else if (c === "'" && !inDouble) {
+            inSingle = !inSingle;
+        } else if (c === '"' && !inSingle) {
+            inDouble = !inDouble;
+        } else if (!inSingle && !inDouble && c === '<' && input[i + 1] === '<' && input[i + 2] !== '<') {
+            const h = readHeredocStart(input, i);
+            if (h.delim) pending.push(h);
+            i = h.next - 1;
+        } else if (!inSingle && !inDouble && c === '\n' && pending.length) {
+            while (pending.length && pending[0].quoted) i = skipHeredocBody(input, i + 1, pending.shift().delim) - 1;
+            pending.length = 0;
+        } else if (!inSingle && c === '(' && input[i + 1] === '(' && (!inDouble || input[i - 1] === '$')) {
+            const end = closeParen(input, i + 1);
+            names.push(...(input.slice(i + 2, end).match(ARITHMETIC_NAME) ?? []));
+            i = end - 1;
+        }
+    }
+    return names;
 }
 
 function checkGit(args, inlineEnv = {}, exported = {}) {
@@ -1760,6 +1824,11 @@ function checkSegment(words, state) {
             }
         }
     }
+    // T6, T7: `read HOME`, `printf -v PATH`, `let GIT_CONFIG_COUNT=0`, `for HOME in ...`.
+    for (const name of assignedNames(cmd, args)) {
+        const r = checkAssigned(name, `${cmd} ${name}`);
+        if (r) return r;
+    }
     // `unset GIT_CONFIG_COUNT` removes the settings env for every later command,
     // and so do `unset ${!GIT_CONFIG@}` and `v=GIT_CONFIG_COUNT; unset $v`.
     if (cmd === 'unset') {
@@ -1925,6 +1994,10 @@ export function checkCommand(command, state = {}) {
     if (segments.some(changesDirectory)) state.cwdMoved = true;
     // K1: a directory change into certs/ makes every relative write target in the line one under certs/.
     if (segments.some((s) => changesDirectory(s) && s.some((x) => /(^|\/)certs(\/|$)/.test(x)))) state.cwdInCerts = true;
+    for (const name of arithmeticNames(command)) {
+        const r = checkAssigned(name, `(( ${name} ))`);
+        if (r) return r;
+    }
     for (const sub of extractSubstitutions(command)) {
         const r = checkCommand(sub, state);
         if (r) return r;
