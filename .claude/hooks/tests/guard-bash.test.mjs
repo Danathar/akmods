@@ -383,6 +383,14 @@ const allowed = [
     '( echo PATH )',
     'echo "(( PATH = 1 ))"',
     "cat <<'EOF'\n$(( PATH = 1 ))\nEOF",
+    // an apostrophe in a comment or a here-document body opens no quote (#335)
+    "git log -1 # it's the last one\ngit status",
+    "cat <<EOF\nit's\nEOF\ngit status",
+    "cat <<EOF\nit's \\$(git push --force origin main)\nEOF",
+    "cat <<'EOF'\nit's $(git push --force origin main)\nEOF\ngit status",
+    "echo '# it' # it's\ngit log -1",
+    'x=${line%% #*}; git status',
+    '(( n = 1 << 2 ))\ngit status',
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -959,6 +967,27 @@ const blocked = [
     ["sed -i 's/--file=/certs/' README.md", 'signing material'],
     ['rsync -a /tmp/a certs/production/signing-keys /tmp/backup/', 'signing material'],
     ['tar --exclude=x -cf /tmp/certs.tar -C certs .', 'signing material'],
+    // an apostrophe in a comment or an unquoted heredoc body opens no quote, so
+    // the substitution after it runs (#335)
+    ["git log -1 # it's the last one\necho $(git push --force origin main)", 'force push'],
+    ["echo a # don't\necho `git push --force origin main`", 'force push'],
+    ["echo a \\\n# it's\necho $(git push --force origin main)", 'force push'],
+    ["cat <<EOF\nit's\n$(git push --force origin main)\nEOF", 'force push'],
+    ["cat <<EOF\ndon't\n`git push --force origin main`\nEOF", 'force push'],
+    ["cat <<EOF\nit's\nEOF\necho $(git push --force origin main)", 'force push'],
+    ["cat <<A; cat <<'B'; cat <<C\nit's\nA\n$(ls)\nB\nit's $(git push --force origin main)\nC", 'force push'],
+    ["echo \"$(echo a # it's\n)\"\ngit push --force origin main", 'force push'],
+    ["git log -1 # $(git push --force origin main)", 'force push'],
+    ["echo a # it's\n(( PATH = 1 )); git log -1", 'PATH'],
+    ["cat <<EOF\nit's\n$(( PATH = 1 ))\nEOF\ngit log -1", 'PATH'],
+    // ` #` inside `${...}` is a pattern, not a comment
+    ['x=${line%% #*}; git push --force origin main', 'force push'],
+    ['x=$(echo ${line%% #*}); git push --force origin main', 'force push'],
+    ['x="$(echo ${line%% #*})"; echo $(git push --force origin main)', 'force push'],
+    ['echo ${x/ #/$(git push --force origin main)}', 'force push'],
+    // a `<<` no line ends may be a shift, so the lines after it are commands
+    ['(( n = 1 << 2 ))\ngit push --force origin main', 'force push'],
+    ['(( n = 1 << 2 ))\ncat <(git push --force origin main)', 'force push'],
     // a backslash-quoted heredoc delimiter ends the body like a quoted one
     ['cat <<\\EOF\nx\nEOF\nsudo ls', 'privilege escalation'],
     ['cat <<E\\OF\nx\nEOF\nsudo ls', 'privilege escalation'],
