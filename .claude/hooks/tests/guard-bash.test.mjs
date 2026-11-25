@@ -378,6 +378,11 @@ const allowed = [
     'MANPATH=/usr/share/man git log -1',
     'HOMEBREW_NO_ANALYTICS=1 git log -1',
     "git log -p -S 'PATH=' -- docs",
+    // A single paren is a subshell, quoted text is data, and a quoted heredoc
+    // body is data, so none of these names PATH in an arithmetic expression.
+    '( echo PATH )',
+    'echo "(( PATH = 1 ))"',
+    "cat <<'EOF'\n$(( PATH = 1 ))\nEOF",
 ];
 
 // [command, fragment that must appear (case-insensitive) in stderr]
@@ -561,6 +566,26 @@ const blocked = [
     ['declare -x XDG_CONFIG_HOME=planted; git log -p', 'changes where git reads its global config'],
     ['typeset PATH=planted; git log -1', 'Run commands with the HOME and PATH you already have'],
     ['readonly HOME=planted; git log -p', 'changes where git reads its global config'],
+    // The same names assigned by a builtin, a loop variable or arithmetic
+    // have the effect of the NAME=value statement.
+    ['read -r HOME <<< planted; git diff HEAD~1 HEAD', 'read HOME'],
+    ['while read -r PATH; do git log -1; done < list', 'changes where git reads its global config'],
+    ['if read PATH < list; then git log -1; fi', 'changes where git reads its global config'],
+    ['builtin read PATH < list; git log -1', 'changes where git reads its global config'],
+    ['mapfile -t PATH < list; git log -1', 'changes where git reads its global config'],
+    ['read GIT_CONFIG_VALUE_0 <<< all; git log -p', 'overwrites the GIT_CONFIG_* settings env'],
+    ['let PATH=1; git log -1', 'changes where git reads its global config'],
+    ['let "PATH = 1"; git log -1', 'changes where git reads its global config'],
+    ['let GIT_CONFIG_COUNT=0; git log -p', 'overwrites the GIT_CONFIG_* settings env'],
+    ['printf -v HOME %s planted; git diff HEAD~1 HEAD', 'changes where git reads its global config'],
+    ['printf -vPATH %s planted; git log -1', 'changes where git reads its global config'],
+    ['for HOME in planted; do git diff HEAD~1 HEAD; done', 'changes where git reads its global config'],
+    ['for (( PATH = 0; PATH < 1; PATH++ )); do git log -1; done', 'changes where git reads its global config'],
+    ['(( PATH = 1 )); git log -1', 'changes where git reads its global config'],
+    ['(( HOME = 1 )); git diff HEAD~1 HEAD', 'changes where git reads its global config'],
+    [': $(( XDG_CONFIG_HOME = 1 )); git log -p -1', 'changes where git reads its global config'],
+    ['echo "$(( PATH = 1 ))"; git log -1', 'changes where git reads its global config'],
+    ['cat <<EOF\n$(( PATH = 1 ))\nEOF\ngit log -1', 'changes where git reads its global config'],
     // naming a repository is what safe.bareRepository=explicit allows, so a bare folder a branch planted
     // is used when named; --work-tree makes git read tracked paths from another directory
     ['git --git-dir=evil log -p', 'named repository'],

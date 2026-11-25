@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const CORPUS_PATH = `${ROOT}tests/fixtures/gate-refusal-corpus.json`;
-const CORPUS_SHA256 = '769a1ef6d8b80df6e283e40732e922887ea23c0ac934dee3c492a91087644984';
+const CORPUS_SHA256 = '358a28365d9d6b71ca29a561bce82e47978b3fffb1fd9f59129b8f6223caab46';
 const settings = JSON.parse(readFileSync(`${ROOT}.claude/settings.json`, 'utf8'));
 const raw = readFileSync(CORPUS_PATH);
 const corpus = JSON.parse(raw.toString('utf8'));
@@ -51,6 +51,13 @@ const KNOWN_GAPS = new Set([
     'unlisted-name-extglob',
     'name-extglob-command-string',
     'name-continuation-extglob-string',
+    // Each changes folder before a plain-file `git diff`, the same reach as
+    // plain-file-two-operands above, which needs no directory change at all.
+    'dir-change-cd-plain-file',
+    'dir-change-cd-semicolon',
+    'dir-change-subshell',
+    'dir-change-pushd',
+    'dir-change-bare-cd',
 ]);
 
 // The command prefix each wildcard Bash(...) allow rule covers. The fleet
