@@ -43,15 +43,11 @@ echo "getting zfs-${ZFS_VERSION}.tar.gz"
 
 echo "Import pinned OpenZFS release keys"
 # https://openzfs.github.io/openzfs-docs/Project%20and%20Community/Signing%20Keys.html
-# Keys are pinned in the repo, not fetched from a keyserver: a keyserver outage must not
-# break builds, and a keyserver must not be able to hand us a different key. Auto key
-# retrieval is disabled so gpg never reaches out during verification.
 export GNUPGHOME
 GNUPGHOME="$(mktemp -d)"
 trap 'rm -rf "${GNUPGHOME}"' EXIT
 printf '%s\n' no-auto-key-retrieve disable-dirmngr > "${GNUPGHOME}/gpg.conf"
 gpg --batch --import /tmp/openzfs-release-keys.asc
-# Sorted full fingerprints of the primary keys: Ned Bass, Tony Hutter, Brian Behlendorf.
 if ! diff -u <(printf '%s\n' \
     29D5610EAE2941E355A2FE8AB97467AAC77B9667 \
     4F3BA9AB6D1F8D683DC2DFB56AD860EED4598027 \

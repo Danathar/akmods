@@ -140,8 +140,8 @@
   prose: narrative: retired patch, kept as history
 ### T6 — `git` in the build environment
   joined: .coverage-thresholds.json
-### T7 — OpenZFS signing keys pinned in the repository
-  joined: .coverage-thresholds.json
+### T7 - *(retired 2026-11-25)* OpenZFS signing keys pinned in the repository
+  prose: narrative: retired patch, kept as history
 ### T8 — `RPMFUSION_MIRROR` rewrite finds the repo files in either directory
   joined: .coverage-thresholds.json
 ### T9 — `just login` passes the registry token on stdin
@@ -150,8 +150,8 @@
   prose: narrative: retired patch, kept as history
 ### T11 — Empty `certs/private_key.priv` placeholder kept
   joined: .coverage-thresholds.json
-### T12 — `nct6687d` and `zenergy` built in the `common` group, ported ahead of upstream #637
-  joined: .coverage-thresholds.json
+### T12 - *(retired 2026-11-25)* `nct6687d` and `zenergy` built in the `common` group, ported ahead of upstream #637
+  prose: narrative: retired patch, kept as history
 ### T13 - Every workflow job sets `timeout-minutes`
   joined: .coverage-thresholds.json
 ### ZFS build tools on the `main` flavor

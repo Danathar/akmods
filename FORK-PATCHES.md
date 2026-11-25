@@ -240,24 +240,17 @@ with upstream's script in the #198 sync; the T5 test, the T5 check in `tests/uni
 - **Remove when:** upstream installs `git` for all flavors, stops using `git apply` (the patch block
   is guarded to ZFS 2.4.3 and disappears once 2.4.4 ships), or starts building ZFS on `main` itself.
 
-### T7 — OpenZFS signing keys pinned in the repository
+### T7 - *(retired 2026-11-25)* OpenZFS signing keys pinned in the repository
 
-- **Files:** `build_files/zfs/build-kmod-zfs.sh`, `build_files/zfs/openzfs-release-keys.asc`, `README.md`
-  (section "OpenZFS release signing keys")
-- **What:** the three OpenZFS release signing keys ship in the repository as an armored keyring. The
-  build imports them into a throwaway `GNUPGHOME` with `no-auto-key-retrieve` and `disable-dirmngr`, and
-  fails unless the primary-key fingerprints are exactly the pinned list of three full 40-digit
-  fingerprints. Signature and checksum verification are unchanged.
-- **Why:** fetching keys from `keyserver.ubuntu.com` at build time made every build depend on that
-  server being up, and trusted whatever it returned. (This fork earlier fetched by full fingerprint
-  instead of 8-digit short IDs, because a look-alike key with the same short ID is cheap to generate;
-  pinning supersedes that and removes the network dependency.)
-- **Merge note:** upstream edits to the key list must be re-expressed in the keyring and the fingerprint
-  list. `policies/fork-patches.json` fails `policy-check` if the pinned import is removed or a short ID
-  fetch comes back.
-- **Remove when:** never needed to be removed if upstream ships the same pinned keys; drop this entry
-  once upstream matches.
-
+The fork pinned the three OpenZFS release signing keys as an armored keyring
+(`build_files/zfs/openzfs-release-keys.asc`) and imported them into a throwaway `GNUPGHOME` with
+`no-auto-key-retrieve` and `disable-dirmngr`, failing unless the primary-key fingerprints matched a pinned
+list, instead of fetching them from `keyserver.ubuntu.com` at build time. Upstream ublue-os/akmods#633
+ships the same keyring, import and fingerprint check, and README section. The #331 sync took upstream's
+`build-kmod-zfs.sh` (the only remaining delta was two comment lines), so the file now matches upstream.
+The `T7-zfs-key-fingerprints` rule in `policies/fork-patches.json` and the T7 test in
+`tests/unit/fork_patches.bats` stay as guards: they pass on upstream's script and fail if a keyserver
+fetch comes back.
 
 ### T8 — `RPMFUSION_MIRROR` rewrite finds the repo files in either directory
 
@@ -305,24 +298,20 @@ which also runs upstream's signing-helper tests.
   Nothing reads it any more. The workflows write production keys to `certs/production/<id>.key`, and
   the build scripts take keys only from `certs/production/` or `certs/test/`.
   `policies/signing-keys.json` still requires it to stay 0 bytes.
-- **Merge note:** the fork has not changed the file, so an upstream merge that includes the deletion
-  removes it without a conflict. Drop this entry and its test then.
-- **Remove when:** the owner approves deleting it, or an upstream merge deletes it.
+- **Merge note:** the #331 sync (upstream ublue-os/akmods#632) deleted the file. The sync kept it, so
+  that the merge changes no check: `policies/signing-keys.json` and the T11 test still expect it. It is
+  now a fork delta against upstream (a 0-byte file).
+- **Remove when:** the owner approves deleting it. Drop this entry, its test and the
+  `policies/signing-keys.json` mention in the same PR.
   `tests/unit/fork_patches.bats` (T11) checks that it is empty and that no build script, workflow or
   `Justfile` recipe names it.
 
-### T12 — `nct6687d` and `zenergy` built in the `common` group, ported ahead of upstream #637
+### T12 - *(retired 2026-11-25)* `nct6687d` and `zenergy` built in the `common` group, ported ahead of upstream #637
 
-- **Files:** `Containerfile.in`, `README.md`, `build_files/common/build-kmod-nct6687d.sh`,
-  `build_files/common/build-kmod-zenergy.sh` (moved from `build_files/extra/`)
-- **What:** both kmods move from the `extra` group to `common`: the scripts move, write their RPMs to
-  `/var/cache/rpms/common`, and run in the `common` build step (without the `|| echo "SKIPPED"` fallback).
-  The README table rows move with them.
-- **Why:** the fork ports upstream's change by hand so that its `common` image carries these drivers
-  before the next upstream sync.
-- **Merge note:** upstream's merge of ublue-os/akmods#637 makes the same edits, so the merge should apply
-  cleanly or conflict only on context lines. Keep upstream's version.
-- **Remove when:** upstream merges ublue-os/akmods#637 and the fork syncs it. Delete this entry then.
+The fork moved both kmods from the `extra` group to `common` by hand before upstream merged
+ublue-os/akmods#637. The #331 sync brought in #637 (and #642, which limits these sensor modules to OGC
+kernels); `Containerfile.in`, `README.md` and the two `build_files/common/` scripts now match upstream.
+The T12 test in `tests/unit/fork_patches.bats` stays and still passes on upstream's layout.
 
 ### T13 - Every workflow job sets `timeout-minutes`
 
