@@ -1292,6 +1292,13 @@ const blocked = [
     ['echo $(if true; then case a in a) sudo id;; esac; fi)', 'privilege escalation'],
     ['echo $(case a in a) case b in b) true;; esac; sudo id;; esac)', 'privilege escalation'],
     ['echo $(case $(echo a) in a) sudo id;; esac)', 'privilege escalation'],
+    // a `)` that is quoted, escaped or in a heredoc body inside a case clause is text
+    ["echo $(case a in a) echo ')'; sudo id;; esac)", 'privilege escalation'],
+    ['echo $(case a in a) echo "\\")"; sudo id;; esac)', 'privilege escalation'],
+    ['echo "$(case a in a) echo \\); sudo id;; esac)"', 'privilege escalation'],
+    ["echo $(case a in a) echo $'\\')'; sudo id;; esac)", 'privilege escalation'],
+    ['echo "$(case a in a) cat <<E\n)\nE\nsudo id;; esac)"', 'privilege escalation'],
+    ['echo "$(case a in a) cat <<E; cat <<F\n)\nE\n)\nF\nsudo id;; esac)"', 'privilege escalation'],
     // `esac` after `|` or `(` in a pattern list is a pattern, not the case's end
     ['echo $(case esac in a|esac) sudo id;; esac)', 'privilege escalation'],
     ['echo $(case esac in a | esac) git push --force origin main;; esac)', 'force'],
